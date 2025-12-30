@@ -1,0 +1,8 @@
+{
+  "name": "NeuroPath: AI Developmental Screening",
+  "description": "A non-invasive system using game-based stimuli, facial/auditory feature extraction, and longitudinal temporal analysis for early developmental risk screening.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
