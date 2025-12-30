@@ -1,4 +1,4 @@
-
+// components/GameEngine.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BehavioralFeature } from '../types';
 
@@ -43,7 +43,8 @@ export const GameEngine: React.FC<GameEngineProps> = ({ onFeatureCapture, onSess
         gazeY: Math.random(),
         frownIntensity: Math.random() * 0.2,
         smileIntensity: score > 5 ? Math.random() : 0.1,
-        vocalPitch: 220 + Math.random() * 20
+        attentionLevel: Math.random(), // THÊM property này
+        affect: score > 5 ? 'positive' : 'neutral' // THÊM property này
       };
       onFeatureCapture(mockFeature);
     }, 100);

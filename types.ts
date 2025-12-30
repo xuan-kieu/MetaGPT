@@ -13,13 +13,17 @@ export interface BehavioralFeature {
   smileIntensity: number;
   vocalPitch?: number;
   vocalVolume?: number;
+  affect: 'positive' | 'neutral' | 'negative';
+  attentionLevel: number;
 }
 
 export interface InferenceResult {
-  patternId: string;
+ score: number;
   confidence: number;
-  explanation: string;
-  behavioralTags: string[];
+  patternId?: string;
+  explanation?: string;
+  behavioralTags?: string[];
+  features: Record<string, any>;
 }
 
 export interface LongitudinalRecord {
@@ -36,4 +40,33 @@ export interface SessionData {
   startTime: number;
   endTime?: number;
   features: BehavioralFeature[];
+}
+// Thêm vào file types.ts hiện có
+export interface Keypoint {
+  x: number;
+  y: number;
+  score: number;
+  name?: string;
+}
+
+export interface PoseResult {
+  keypoints: Keypoint[];
+  score: number;
+  normalized?: boolean;
+}
+
+export interface ExercisePose {
+  name: string;
+  expectedKeypoints: string[];
+  thresholds: {
+    minAngle: number;
+    maxAngle: number;
+    minConfidence: number;
+  };
+}
+
+export interface Pose {
+  keypoints: Keypoint[];
+  score?: number;
+  box?: any;
 }
