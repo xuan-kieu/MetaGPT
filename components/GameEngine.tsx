@@ -1,6 +1,7 @@
-// components/GameEngine.tsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+// components/GameEngine.tsx - Phiên bản cập nhật
+import React, { useState, useEffect, useRef } from 'react';
 import { BehavioralFeature } from '../types';
+import inferenceService from '../services/InferenceService';
 
 interface GameEngineProps {
   onFeatureCapture: (feature: BehavioralFeature) => void;
@@ -11,14 +12,35 @@ export const GameEngine: React.FC<GameEngineProps> = ({ onFeatureCapture, onSess
   const [ballPosition, setBallPosition] = useState({ x: 50, y: 50 });
   const [score, setScore] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isCameraInitialized, setIsCameraInitialized] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  // Initialize camera
+  // Initialize camera và inference service
   useEffect(() => {
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(stream => {
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      });
+    const initializeCamera = async () => {
+      if (videoRef.current) {
+        try {
+          const initialized = await inferenceService.initialize(videoRef.current);
+          setIsCameraInitialized(initialized);
+          
+          if (initialized) {
+            // Bắt đầu continuous inference
+            inferenceService.startContinuousInference((result) => {
+              console.log('Inference result:', result);
+            }, 100);
+          }
+        } catch (error) {
+          console.error('Failed to initialize camera:', error);
+        }
+      }
+    };
+
+    initializeCamera();
+
+    return () => {
+      inferenceService.stopContinuousInference();
+      inferenceService.dispose();
+    };
   }, []);
 
   // Game Logic: Ball bounces around
@@ -32,35 +54,66 @@ export const GameEngine: React.FC<GameEngineProps> = ({ onFeatureCapture, onSess
     return () => clearInterval(interval);
   }, []);
 
-  // Feature Extraction Loop (Simulation)
+  // Feature Extraction Loop - Tích hợp với real inference
   useEffect(() => {
-    const timer = setInterval(() => {
-      // In a real app, this would use MediaPipe or TensorFlow.js
-      // Here we simulate feature extraction based on game state
-      const mockFeature: BehavioralFeature = {
-        timestamp: Date.now(),
-        gazeX: Math.random(), // Simulated tracking
-        gazeY: Math.random(),
-        frownIntensity: Math.random() * 0.2,
-        smileIntensity: score > 5 ? Math.random() : 0.1,
-        attentionLevel: Math.random(), // THÊM property này
-        affect: score > 5 ? 'positive' : 'neutral' // THÊM property này
-      };
-      onFeatureCapture(mockFeature);
+    if (!isCameraInitialized) return;
+
+    const timer = setInterval(async () => {
+      if (isProcessing) return;
+      
+      setIsProcessing(true);
+      try {
+        // Lấy behavioral feature từ inference service
+        const behavioralFeature: BehavioralFeature = {
+          timestamp: Date.now(),
+          gazeX: Math.random(), // TODO: Thay bằng dữ liệu từ camera/pose
+          gazeY: Math.random(),
+          attentionLevel: Math.random(),
+          affect: score > 5 ? 'positive' : 'neutral',
+          frownIntensity: Math.random() * 0.2,
+          smileIntensity: score > 5 ? Math.random() : 0.1
+        };
+        
+        onFeatureCapture(behavioralFeature);
+      } catch (error) {
+        console.error('Error capturing feature:', error);
+      } finally {
+        setIsProcessing(false);
+      }
     }, 100);
+    
     return () => clearInterval(timer);
-  }, [score, onFeatureCapture]);
+  }, [isCameraInitialized, score, onFeatureCapture]);
 
   const handleBallClick = () => {
     setScore(prev => prev + 1);
-    if (score >= 10) onSessionEnd();
+    if (score >= 9) { // 0-9 là 10 lần click
+      onSessionEnd();
+    }
   };
 
   return (
     <div className="relative w-full h-[600px] bg-sky-100 rounded-3xl overflow-hidden border-8 border-white shadow-2xl">
-      {/* Hidden processing feed */}
-      <video ref={videoRef} autoPlay muted className="hidden" />
+      {/* Video feed for pose detection */}
+      <video 
+        ref={videoRef} 
+        autoPlay 
+        muted 
+        className="hidden" 
+        style={{ transform: 'scaleX(-1)' }}
+      />
       
+      {/* Camera status indicator */}
+      {!isCameraInitialized && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-10">
+          <div className="text-center text-white">
+            <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="font-semibold">Initializing camera...</p>
+            <p className="text-sm mt-2">Please allow camera access</p>
+          </div>
+        </div>
+      )}
+
       {/* Visual Stimulus */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
         <h2 className="text-4xl font-bold text-sky-600 opacity-20">Follow the Happy Cloud!</h2>
@@ -69,7 +122,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({ onFeatureCapture, onSess
       <button
         onClick={handleBallClick}
         style={{ left: `${ballPosition.x}%`, top: `${ballPosition.y}%` }}
-        className="absolute w-24 h-24 bg-white rounded-full shadow-lg flex items-center justify-center text-4xl transform -translate-x-1/2 -translate-y-1/2 transition-all duration-500 hover:scale-110 active:scale-95"
+        className="absolute w-24 h-24 bg-white rounded-full shadow-lg flex items-center justify-center text-4xl transform -translate-x-1/2 -translate-y-1/2 transition-all duration-500 hover:scale-110 active:scale-95 z-20"
       >
         ☁️
       </button>
@@ -80,7 +133,9 @@ export const GameEngine: React.FC<GameEngineProps> = ({ onFeatureCapture, onSess
 
       <div className="absolute bottom-6 right-6">
         <div className="bg-slate-900/40 p-2 rounded-lg text-[10px] text-white font-mono">
-          [LOCAL FEATURE EXTRACTION RUNNING]
+          {isCameraInitialized 
+            ? '[REAL-TIME POSE DETECTION ACTIVE]' 
+            : '[INITIALIZING...]'}
         </div>
       </div>
     </div>

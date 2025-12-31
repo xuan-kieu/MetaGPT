@@ -44,6 +44,9 @@ export class InferenceService {
       return { 
         score: 0, 
         confidence: 0.5, 
+        patternId: 'INSUFFICIENT_DATA',
+        explanation: 'Window size too small for analysis',
+        behavioralTags: ['insufficient_data'],
         features: { 
           message: 'Window size too small',
           windowSize: window.length 
@@ -54,6 +57,9 @@ export class InferenceService {
     try {
       let poseScore = 0;
       let hasPoseData = false;
+      let patternId = 'BEHAVIORAL_ONLY';
+      let explanation = 'Analysis based on behavioral features only';
+      let behavioralTags: string[] = [];
 
       // Lấy pose data nếu camera đã khởi tạo
       if (this.videoElement && poseDetectionService.isInitialized) {
@@ -62,6 +68,9 @@ export class InferenceService {
         if (pose && pose.keypoints && pose.keypoints.length > 0) {
           hasPoseData = true;
           poseScore = this.calculatePoseStability(pose);
+          patternId = 'BEHAVIORAL_WITH_POSE';
+          explanation = 'Analysis combines behavioral and pose data';
+          behavioralTags.push('pose_detected');
         }
       }
 
@@ -84,6 +93,9 @@ export class InferenceService {
       return {
         score: finalScore,
         confidence: hasPoseData ? 0.9 : 0.7, // Confidence cao hơn nếu có pose data
+        patternId,
+        explanation,
+        behavioralTags: behavioralTags.length > 0 ? behavioralTags : ['behavioral_analysis'],
         features: {
           gazeVariability,
           windowSize: window.length,
@@ -97,6 +109,9 @@ export class InferenceService {
       return {
         score: 0,
         confidence: 0.1,
+        patternId: 'ERROR',
+        explanation: 'Processing failed due to an error',
+        behavioralTags: ['error', 'processing_failed'],
         features: { 
           error: 'Processing failed',
           errorMessage: error instanceof Error ? error.message : 'Unknown error'

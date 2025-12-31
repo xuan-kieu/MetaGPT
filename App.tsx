@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { AppMode, BehavioralFeature, LongitudinalRecord, InferenceResult } from './types';
 import { GameEngine } from './components/GameEngine';
@@ -6,6 +5,7 @@ import { ClinicianDashboard } from './components/ClinicianDashboard';
 import { PrivacyWall } from './components/PrivacyWall';
 import { InferenceService } from './services/InferenceService';
 import { analyzeBehavioralPatterns } from './services/geminiService';
+import inferenceService from './services/InferenceService'; 
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>(AppMode.PATIENT);
@@ -27,9 +27,11 @@ const App: React.FC = () => {
     setMode(AppMode.CLINICIAN);
     
     // Simulate Inference Service Call
-    const finalScore = InferenceService.processStreamingData(sessionFeatures);
-    
     try {
+      // Sử dụng instance method thay vì static method
+      const inferenceResult = await inferenceService.processStreamingData(sessionFeatures);
+      const finalScore = inferenceResult.score;
+      
       // Get AI Analysis
       const analysis = await analyzeBehavioralPatterns(sessionFeatures);
       setCurrentAnalysis(analysis);
