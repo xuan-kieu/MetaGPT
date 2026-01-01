@@ -12,6 +12,7 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({ records, latestAn
   ? (latestAnalysis.confidence * 10).toFixed(1) // ví dụ scale
   : (records.length > 0 ? records[records.length - 1].riskScore.toFixed(1) : '--');
 
+  
 
   const displayExplanation = latestAnalysis 
     ? latestAnalysis.explanation 
