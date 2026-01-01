@@ -41,7 +41,6 @@ export interface SessionData {
   endTime?: number;
   features: BehavioralFeature[];
 }
-// Thêm vào file types.ts hiện có
 export interface Keypoint {
   x: number;
   y: number;
@@ -69,4 +68,17 @@ export interface Pose {
   keypoints: Keypoint[];
   score?: number;
   box?: any;
+}
+export interface PoseData {
+  jointAngles: Record<string, number>;
+  symmetry: number;
+  stability: Record<string, number>;
+  rangeOfMotion: Record<string, number>;
+}
+
+export interface ClinicalAnalysis {
+  analysisId: string;
+  [key: string]: any; // Cấu trúc linh hoạt cho các loại phân tích khác nhau
+  timestamp: string;
+  confidence?: number;
 }

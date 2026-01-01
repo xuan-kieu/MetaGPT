@@ -1,20 +1,24 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { AppMode, BehavioralFeature, LongitudinalRecord, InferenceResult } from './types';
 import { GameEngine } from './components/GameEngine';
 import { ClinicianDashboard } from './components/ClinicianDashboard';
-import { PrivacyWall } from './components/PrivacyWall';
-import { InferenceService } from './services/InferenceService';
 import { analyzeBehavioralPatterns } from './services/geminiService';
 import inferenceService from './services/InferenceService'; 
+
+// Đừng quên import file CSS của bạn
+import './style.css'; 
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>(AppMode.PATIENT);
   const [sessionFeatures, setSessionFeatures] = useState<BehavioralFeature[]>([]);
+  
+  // Dữ liệu mẫu (giữ nguyên logic của bạn)
   const [records, setRecords] = useState<LongitudinalRecord[]>([
     { id: '1', date: '2023-11-01', riskScore: 12, observations: [], features: [] },
     { id: '2', date: '2023-11-15', riskScore: 28, observations: [], features: [] },
     { id: '3', date: '2023-12-05', riskScore: 18, observations: [], features: [] },
   ]);
+  
   const [currentAnalysis, setCurrentAnalysis] = useState<InferenceResult | undefined>();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -24,19 +28,17 @@ const App: React.FC = () => {
 
   const handleSessionEnd = async () => {
     setIsAnalyzing(true);
-    setMode(AppMode.CLINICIAN);
+    // Chuyển ngay sang màn hình dashboard để hiện loading
+    setMode(AppMode.CLINICIAN); 
     
-    // Simulate Inference Service Call
     try {
-      // Sử dụng instance method thay vì static method
+      // Logic xử lý AI (Giữ nguyên code của bạn)
       const inferenceResult = await inferenceService.processStreamingData(sessionFeatures);
       const finalScore = inferenceResult.score;
       
-      // Get AI Analysis
       const analysis = await analyzeBehavioralPatterns(sessionFeatures);
       setCurrentAnalysis(analysis);
       
-      // Save Record
       const newRecord: LongitudinalRecord = {
         id: Math.random().toString(),
         date: new Date().toISOString(),
@@ -54,63 +56,61 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Global Header */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-xl italic shadow-indigo-200 shadow-lg">
-            NP
-          </div>
-          <div>
-            <h1 className="text-lg font-extrabold tracking-tight text-slate-900 leading-none">NeuroPath</h1>
-            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest mt-1">AI Developmental System</p>
+    <div className="app-container">
+      {/* --- HEADER --- */}
+      <header className="main-header">
+        <div className="logo-section">
+          <div className="logo-box">NP</div>
+          <div className="logo-text">
+            <h1>NeuroPath</h1>
+            <div className="logo-subtext">AI Developmental System</div>
           </div>
         </div>
 
-        <div className="flex items-center space-x-6">
-          <PrivacyWall />
-          <nav className="flex bg-slate-100 p-1 rounded-xl">
+        <div className="nav-controls">
+          <div className="privacy-wall">
+            <div className="privacy-dot"></div>
+            Privacy Wall Active: No Raw Data Egress
+          </div>
+          
+          <div className="nav-pill-group">
             <button 
               onClick={() => setMode(AppMode.PATIENT)}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${mode === AppMode.PATIENT ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`nav-pill ${mode === AppMode.PATIENT ? 'active' : ''}`}
             >
               Patient App
             </button>
             <button 
               onClick={() => setMode(AppMode.CLINICIAN)}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${mode === AppMode.CLINICIAN ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`nav-pill ${mode === AppMode.CLINICIAN ? 'active' : ''}`}
             >
               Clinician Dashboard
             </button>
-          </nav>
+          </div>
         </div>
       </header>
 
-      <main className="flex-1 p-8 max-w-7xl mx-auto w-full">
+      {/* --- MAIN CONTENT --- */}
+      <main className="main-content">
         {mode === AppMode.PATIENT ? (
-          <div className="max-w-4xl mx-auto space-y-8">
-            <div className="text-center space-y-2">
-              <h2 className="text-3xl font-bold text-slate-900">Let's Play a Game!</h2>
-              <p className="text-slate-500">Find 10 clouds to complete the session.</p>
-            </div>
-            <GameEngine 
-              onFeatureCapture={handleFeatureCapture} 
-              onSessionEnd={handleSessionEnd}
-            />
-          </div>
+          <GameEngine 
+            onFeatureCapture={handleFeatureCapture} 
+            onSessionEnd={handleSessionEnd}
+          />
         ) : (
-          <div className="space-y-8 animate-in fade-in duration-700">
-            <div className="flex justify-between items-end">
-              <div>
-                <h2 className="text-2xl font-bold text-slate-900">Clinical Overview</h2>
-                <p className="text-slate-500">Subject: ANON_ID_{records.length + 1000}</p>
+          <div className="animate-in fade-in duration-700">
+             {/* Header Dashboard */}
+            <div className="game-header" style={{ marginBottom: '2rem' }}>
+              <h2>Clinical Overview</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <p>Subject: ANON_ID_{records.length + 1000}</p>
+                {isAnalyzing && (
+                  <span className="loading-indicator">
+                    <div className="spinner"></div>
+                    Running AI Analysis...
+                  </span>
+                )}
               </div>
-              {isAnalyzing && (
-                <div className="flex items-center space-x-2 text-indigo-600 font-semibold text-sm animate-pulse">
-                  <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                  <span>Running AI Pattern Analysis...</span>
-                </div>
-              )}
             </div>
             
             <ClinicianDashboard 
@@ -121,31 +121,20 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Footer / Dev Docs */}
-      <footer className="bg-slate-50 border-t border-slate-200 p-8">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-12">
-          <div>
-            <h4 className="font-bold text-slate-800 mb-4">System Architecture</h4>
-            <ul className="text-sm text-slate-600 space-y-2">
-              <li className="flex items-start space-x-2">
-                <span className="text-indigo-500 font-bold">•</span>
-                <span><strong>Stimulus Engine:</strong> Randomized visual tasks triggers behavioral responses.</span>
-              </li>
-              <li className="flex items-start space-x-2">
-                <span className="text-indigo-500 font-bold">•</span>
-                <span><strong>Local Feature Extractor:</strong> ML-based landmarking occurs entirely in-browser.</span>
-              </li>
-              <li className="flex items-start space-x-2">
-                <span className="text-indigo-500 font-bold">•</span>
-                <span><strong>L-TCN Inference:</strong> Temporal Convolutional Network analyzes variance across timestamps.</span>
-              </li>
+      {/* --- FOOTER --- */}
+      <footer className="main-footer">
+        <div className="footer-content">
+          <div className="footer-section">
+            <h4>System Architecture</h4>
+            <ul className="footer-list">
+              <li><span className="bullet">•</span> <strong>Stimulus Engine:</strong> Randomized visual tasks triggers behavioral responses.</li>
+              <li><span className="bullet">•</span> <strong>Local Feature Extractor:</strong> ML-based landmarking occurs entirely in-browser.</li>
+              <li><span className="bullet">•</span> <strong>L-TCN Inference:</strong> Temporal Convolutional Network analyzes variance across timestamps.</li>
             </ul>
           </div>
-          <div className="bg-white p-6 rounded-2xl border border-slate-200">
-            <h4 className="font-bold text-slate-800 mb-2 italic">Legal Disclaimer</h4>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              This system is for research and screening assistance only. It does not provide diagnostic labels or medical advice. Results should be interpreted by qualified professionals within the context of comprehensive clinical assessment.
-            </p>
+          <div className="disclaimer-box">
+            <h4>Legal Disclaimer</h4>
+            <p>This system is for research and screening assistance only. It does not provide diagnostic labels or medical advice. Results should be interpreted by qualified professionals within the context of comprehensive clinical assessment.</p>
           </div>
         </div>
       </footer>
