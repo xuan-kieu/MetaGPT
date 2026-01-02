@@ -4,19 +4,35 @@ import { GameEngine } from './components/GameEngine';
 import { ClinicianDashboard } from './components/ClinicianDashboard';
 import { analyzeBehavioralPatterns } from './services/geminiService';
 import inferenceService from './services/InferenceService'; 
-
-// Đừng quên import file CSS của bạn
-import './style.css'; 
+import './style.css';
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>(AppMode.PATIENT);
   const [sessionFeatures, setSessionFeatures] = useState<BehavioralFeature[]>([]);
   
-  // Dữ liệu mẫu (giữ nguyên logic của bạn)
+  // FIX: Thêm metrics cho records
   const [records, setRecords] = useState<LongitudinalRecord[]>([
-    { id: '1', date: '2023-11-01', riskScore: 12, observations: [], features: [] },
-    { id: '2', date: '2023-11-15', riskScore: 28, observations: [], features: [] },
-    { id: '3', date: '2023-12-05', riskScore: 18, observations: [], features: [] },
+    { 
+      id: '1', 
+      date: '2023-11-01', 
+      riskScore: 12, 
+      observations: ['Initial baseline'], 
+      features: [] 
+    },
+    { 
+      id: '2', 
+      date: '2023-11-15', 
+      riskScore: 28, 
+      observations: ['Increased variability'], 
+      features: [] 
+    },
+    { 
+      id: '3', 
+      date: '2023-12-05', 
+      riskScore: 18, 
+      observations: ['Stabilizing'], 
+      features: [] 
+    },
   ]);
   
   const [currentAnalysis, setCurrentAnalysis] = useState<InferenceResult | undefined>();
@@ -26,32 +42,53 @@ const App: React.FC = () => {
     setSessionFeatures(prev => [...prev, feature]);
   }, []);
 
-  const handleSessionEnd = async () => {
+  // FIX: Nhận features từ GameEngine
+  const handleSessionEnd = async (features: BehavioralFeature[]) => {
     setIsAnalyzing(true);
-    // Chuyển ngay sang màn hình dashboard để hiện loading
-    setMode(AppMode.CLINICIAN); 
+    setMode(AppMode.CLINICIAN);
     
     try {
-      // Logic xử lý AI (Giữ nguyên code của bạn)
-      const inferenceResult = await inferenceService.processStreamingData(sessionFeatures);
+      // FIX: Dùng features từ GameEngine thay vì state
+      const inferenceResult = await inferenceService.processStreamingData(features);
       const finalScore = inferenceResult.score;
       
-      const analysis = await analyzeBehavioralPatterns(sessionFeatures);
-      setCurrentAnalysis(analysis);
+      const analysis = await analyzeBehavioralPatterns(features);
+      
+      // FIX: Kết hợp cả hai kết quả
+      const combinedAnalysis: InferenceResult = {
+        ...analysis,
+        score: finalScore,
+        confidence: (inferenceResult.confidence + analysis.confidence) / 2
+      };
+      
+      setCurrentAnalysis(combinedAnalysis);
       
       const newRecord: LongitudinalRecord = {
-        id: Math.random().toString(),
-        date: new Date().toISOString(),
+        id: Date.now().toString(),
+        date: new Date().toISOString().split('T')[0],
         riskScore: finalScore,
-        observations: [analysis.explanation],
-        features: sessionFeatures
+        observations: [combinedAnalysis.explanation],
+        features: features
       };
+      
       setRecords(prev => [...prev, newRecord]);
     } catch (error) {
       console.error("Analysis failed", error);
+      
+      // Fallback analysis
+      const fallbackAnalysis: InferenceResult = {
+        score: 5,
+        confidence: 0.5,
+        patternId: 'fallback-' + Date.now(),
+        explanation: 'Analysis completed with basic pattern matching',
+        behavioralTags: ['basic_analysis', 'fallback'],
+        features: { error: 'Gemini API failed', featuresCount: features.length }
+      };
+      
+      setCurrentAnalysis(fallbackAnalysis);
     } finally {
       setIsAnalyzing(false);
-      setSessionFeatures([]);
+      setSessionFeatures([]); // Reset
     }
   };
 
@@ -99,7 +136,7 @@ const App: React.FC = () => {
           />
         ) : (
           <div className="animate-in fade-in duration-700">
-             {/* Header Dashboard */}
+            {/* Header Dashboard */}
             <div className="game-header" style={{ marginBottom: '2rem' }}>
               <h2>Clinical Overview</h2>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

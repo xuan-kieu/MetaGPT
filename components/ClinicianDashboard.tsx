@@ -7,12 +7,10 @@ interface DashboardProps {
 }
 
 export const ClinicianDashboard: React.FC<DashboardProps> = ({ records, latestAnalysis }) => {
-  // Lấy dữ liệu để hiển thị (Nếu chưa có analysis thì hiển thị record cuối)
+  // Lấy dữ liệu để hiển thị
   const displayScore = latestAnalysis
-  ? (latestAnalysis.confidence * 10).toFixed(1) // ví dụ scale
-  : (records.length > 0 ? records[records.length - 1].riskScore.toFixed(1) : '--');
-
-  
+    ? latestAnalysis.score.toFixed(1)
+    : (records.length > 0 ? records[records.length - 1].riskScore.toFixed(1) : '--');
 
   const displayExplanation = latestAnalysis 
     ? latestAnalysis.explanation 
@@ -20,9 +18,15 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({ records, latestAn
 
   const confidence = latestAnalysis ? Math.round(latestAnalysis.confidence * 100) : 0;
 
+  // Tạo dữ liệu cho biểu đồ từ riskScore của các records
+  const chartData = records.map((record, index) => ({
+    x: index,
+    y: record.riskScore,
+    date: record.date
+  }));
+
   return (
     <div className="dashboard-grid">
-      
       {/* --- CỘT TRÁI: BIỂU ĐỒ (SVG THUẦN) --- */}
       <div className="card">
         <div className="card-header">
@@ -47,26 +51,52 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({ records, latestAn
                 <stop offset="100%" stopColor="#6366f1" stopOpacity={0}/>
               </linearGradient>
             </defs>
-            {/* Đường cong mô phỏng (Visual only) */}
-            <path 
-              d="M0,250 C150,150 300,50 400,50 S650,150 800,200" 
-              fill="none" 
-              stroke="#6366f1" 
-              strokeWidth="4" 
-              strokeLinecap="round"
-            />
-            <path 
-              d="M0,250 C150,150 300,50 400,50 S650,150 800,200 L800,300 L0,300 Z" 
-              fill="url(#purpleGradient)" 
-              style={{ opacity: 0.3 }}
-            />
+            {/* Đường cong từ dữ liệu thực */}
+            {chartData.length > 1 && (
+              <>
+                <path 
+                  d={`M ${chartData.map((point, i) => 
+                    `${40 + i * (760 / (chartData.length - 1))},${250 - point.y * 2}`
+                  ).join(' L ')}`}
+                  fill="none" 
+                  stroke="#6366f1" 
+                  strokeWidth="4" 
+                  strokeLinecap="round"
+                />
+                <path 
+                  d={`M ${chartData.map((point, i) => 
+                    `${40 + i * (760 / (chartData.length - 1))},${250 - point.y * 2}`
+                  ).join(' L ')} L 760,300 L 40,300 Z`}
+                  fill="url(#purpleGradient)" 
+                  style={{ opacity: 0.3 }}
+                />
+                {/* Data points */}
+                {chartData.map((point, i) => (
+                  <circle
+                    key={i}
+                    cx={40 + i * (760 / (chartData.length - 1))}
+                    cy={250 - point.y * 2}
+                    r="4"
+                    fill="#6366f1"
+                    stroke="white"
+                    strokeWidth="2"
+                  />
+                ))}
+              </>
+            )}
           </svg>
 
           {/* X Axis Labels */}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '0.75rem', color: '#94a3b8' }}>
-            <span>11/1/2023</span>
-            <span>11/15/2023</span>
-            <span>12/5/2023</span>
+            {chartData.length > 0 && (
+              <>
+                <span>{chartData[0].date}</span>
+                {chartData.length > 1 && (
+                  <span>{chartData[Math.floor(chartData.length / 2)].date}</span>
+                )}
+                <span>{chartData[chartData.length - 1].date}</span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -91,7 +121,7 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({ records, latestAn
                 <span style={{ fontSize: '2.5rem', fontWeight: 800, color: '#6366f1' }}>
                   {displayScore}
                 </span>
-                <span className="tag">Variance Score</span>
+                <span className="tag">Composite Score</span>
               </div>
               
               <p style={{ fontSize: '0.875rem', color: '#475569', lineHeight: 1.6, marginBottom: '1rem' }}>

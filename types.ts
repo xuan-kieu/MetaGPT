@@ -1,4 +1,3 @@
-
 export enum AppMode {
   PATIENT = 'PATIENT',
   CLINICIAN = 'CLINICIAN',
@@ -15,14 +14,16 @@ export interface BehavioralFeature {
   vocalVolume?: number;
   affect: 'positive' | 'neutral' | 'negative';
   attentionLevel: number;
+  poseConfidence?: number;   // Thêm
+  faceConfidence?: number;   // Thêm
 }
 
 export interface InferenceResult {
- score: number;
+  score: number;
   confidence: number;
-  patternId?: string;
-  explanation?: string;
-  behavioralTags?: string[];
+  patternId: string;          // Thêm required
+  explanation: string;        // Thêm required
+  behavioralTags: string[];   // Thêm required
   features: Record<string, any>;
 }
 
@@ -41,6 +42,7 @@ export interface SessionData {
   endTime?: number;
   features: BehavioralFeature[];
 }
+
 export interface Keypoint {
   x: number;
   y: number;
@@ -69,6 +71,7 @@ export interface Pose {
   score?: number;
   box?: any;
 }
+
 export interface PoseData {
   jointAngles: Record<string, number>;
   symmetry: number;
@@ -78,7 +81,7 @@ export interface PoseData {
 
 export interface ClinicalAnalysis {
   analysisId: string;
-  [key: string]: any; // Cấu trúc linh hoạt cho các loại phân tích khác nhau
+  [key: string]: any;
   timestamp: string;
   confidence?: number;
 }
