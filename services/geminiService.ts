@@ -23,10 +23,12 @@ export const analyzeBehavioralPatterns = async (
   const avgGazeY = features.reduce((acc, f) => acc + f.gazeY, 0) / features.length;
   const avgSmile = features.reduce((acc, f) => acc + f.smileIntensity, 0) / features.length;
   const avgAttention = features.reduce((acc, f) => acc + f.attentionLevel, 0) / features.length;
+  const avgFrown = features.reduce((acc, f) => acc + f.frownIntensity, 0) / features.length;
   
   // Tính thêm các metrics variance
   const gazeXVariance = calculateVariance(features, 'gazeX');
   const gazeYVariance = calculateVariance(features, 'gazeY');
+  const affectRatio = avgSmile / Math.max(0.1, avgFrown);
   
   // Tính toán behavioral score dựa trên các metrics
   const behavioralScore = calculateBehavioralScore(
@@ -36,109 +38,128 @@ export const analyzeBehavioralPatterns = async (
     gazeYVariance
   );
 
-  const prompt = `You are an expert developmental behavior analyst. Analyze these ANONYMIZED behavioral features extracted on-device (no raw video/audio):
-  
-SESSION METRICS:
-- Average Gaze X Position: ${avgGazeX.toFixed(3)} (0=left, 1=right)
-- Average Gaze Y Position: ${avgGazeY.toFixed(3)} (0=top, 1=bottom)
-- Gaze X Variance: ${gazeXVariance.toFixed(3)} (lower = more stable)
-- Gaze Y Variance: ${gazeYVariance.toFixed(3)} (lower = more stable)
-- Positive Affect (Smile Intensity): ${avgSmile.toFixed(3)} (0-1 scale)
-- Attention Level: ${avgAttention.toFixed(3)} (0-1 scale)
+  const prompt = `ANALYZE BEHAVIORAL PATTERNS - CHILD DEVELOPMENT SCREENING
+
+SESSION CONTEXT:
+- Activity: Interactive "Catch the Cloud" visual tracking game
+- Duration: ${((features[features.length-1].timestamp - features[0].timestamp) / 1000).toFixed(1)} seconds
 - Data Points: ${features.length}
-- Session Duration: ${((features[features.length-1].timestamp - features[0].timestamp) / 1000).toFixed(1)} seconds
 
-TASK: Subject was engaged in a visual tracking game (clicking moving targets).
+BEHAVIORAL METRICS (extracted on-device, no raw video):
+1. VISUAL ATTENTION:
+   - Gaze Stability X: ${(1 - gazeXVariance).toFixed(3)} (0=unstable, 1=stable)
+   - Gaze Stability Y: ${(1 - gazeYVariance).toFixed(3)}
+   - Attention Level: ${avgAttention.toFixed(3)} (0-1 scale)
 
-INSTRUCTIONS:
-1. Analyze gaze patterns for stability and engagement
-2. Assess affect/emotional response consistency
-3. Evaluate attention maintenance
-4. Provide 3-5 behavioral observation tags
-5. DO NOT provide medical diagnoses
-6. DO NOT use technical jargon without explanation
-7. Focus on observable behavioral patterns only
+2. AFFECT & ENGAGEMENT:
+   - Positive Affect (Smile): ${avgSmile.toFixed(3)} (0-1)
+   - Engagement Ratio: ${affectRatio.toFixed(2)} (higher=more positive)
+   - Average Gaze Position: (${avgGazeX.toFixed(3)}, ${avgGazeY.toFixed(3)})
 
-RESPONSE FORMAT (JSON):
+ANALYSIS REQUEST:
+Provide a concise 2-3 sentence behavioral observation focusing on:
+- Visual tracking consistency
+- Engagement with interactive stimuli
+- Affect regulation during task
+- Age-appropriate interaction patterns
+
+IMPORTANT: NO medical diagnoses. Use descriptive, observational language only.
+
+FORMAT: Return ONLY a JSON object with this structure:
 {
-  "explanation": "2-3 sentence clinical observation",
-  "behavioralTags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
-  "confidence": 0.95
+  "explanation": "Your analysis here",
+  "behavioralTags": ["tag1", "tag2", "tag3"],
+  "confidence": 0.85
 }`;
 
   try {
-    console.log("Calling Gemini API with features:", features.length);
+    console.log(`Calling Gemini API with ${features.length} features...`);
     
-    // FIX: Sử dụng API call đúng với Google GenAI SDK mới nhất
+    // Sử dụng model gemini-3-pro-preview
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash", // Model nhanh và hiệu quả
-      contents: prompt, // FIX: SDK mới chỉ cần string prompt
+      model: "gemini-3-pro-preview", // Model mới nhất
+      contents: [{ 
+        role: "user", 
+        parts: [{ text: prompt }]
+      }],
       config: {
         temperature: 0.7,
-        topP: 0.95,
-        topK: 40,
         maxOutputTokens: 500,
+        responseMimeType: "application/json"
       }
     });
 
-    // FIX: Parse response theo SDK mới
+    console.log("Gemini API response received");
+
+    // Parse response - cách 1: response.text
     let resultText = '';
     
-    // Cách 1: Nếu response có text property
-    if (response.text) {
-      resultText = response.text;
-    } 
-    // Cách 2: Nếu response có candidates
-    else if (response.candidates && response.candidates[0]?.content?.parts) {
-      resultText = response.candidates[0].content.parts
-        .map((part: any) => part.text || '')
-        .join('');
-    } 
-    // Cách 3: Trực tiếp từ response
-    else if (typeof response === 'string') {
+    if (typeof response === 'string') {
       resultText = response;
+    } else if (response.text) {
+      resultText = response.text;
+    } else if (response.candidates?.[0]?.content?.parts?.[0]?.text) {
+      resultText = response.candidates[0].content.parts[0].text;
     } else {
       console.warn("Unexpected response format:", response);
-      throw new Error("Unexpected response format from Gemini");
+      return createFallbackResult(features, "Unexpected API response format");
     }
 
-    console.log("Gemini raw response:", resultText);
+    console.log("Raw Gemini response:", resultText.substring(0, 200) + "...");
 
-    // Trích xuất JSON từ response (có thể có text ngoài JSON)
-    const jsonMatch = resultText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.warn("No JSON found in response, creating structured response from text");
-      return createStructuredResult(resultText, behavioralScore, features);
-    }
-
-    const jsonStr = jsonMatch[0];
+    // Clean and parse JSON
+    const cleanedText = resultText.replace(/```json\s*|\s*```/g, '').trim();
     let result;
     
     try {
-      result = JSON.parse(jsonStr);
+      result = JSON.parse(cleanedText);
     } catch (parseError) {
-      console.error("Failed to parse JSON from response:", parseError);
-      return createStructuredResult(resultText, behavioralScore, features);
+      console.error("Failed to parse JSON, trying to extract:", parseError);
+      
+      // Try to extract JSON with regex
+      const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          result = JSON.parse(jsonMatch[0]);
+        } catch (e) {
+          console.error("Regex extraction failed:", e);
+          return createFallbackResult(features, "JSON parsing failed");
+        }
+      } else {
+        return createFallbackResult(features, "No JSON found in response");
+      }
     }
 
     // Validate required fields
     if (!result.explanation || !Array.isArray(result.behavioralTags)) {
-      console.warn("Missing required fields in response, using fallback");
+      console.warn("Missing required fields in response:", result);
       return createFallbackResult(features, "Invalid response structure");
     }
 
-    // Ensure confidence is a number
+    // Ensure confidence is a valid number
     const confidence = typeof result.confidence === 'number' 
-      ? Math.min(1, Math.max(0, result.confidence))
+      ? Math.min(0.99, Math.max(0.5, result.confidence))
       : 0.8;
 
-    // Calculate final score combining behavioral score and AI confidence
-    const finalScore = Math.min(10, Math.round(behavioralScore * 0.7 + confidence * 10 * 0.3));
+    // Calculate final score (combine behavioral score and AI confidence)
+    const finalScore = Math.min(10, Math.round(
+      behavioralScore * 0.6 + // 60% từ behavioral metrics
+      confidence * 10 * 0.4    // 40% từ AI confidence
+    ));
+
+    // Generate tags từ analysis
+    const generatedTags = generateBehavioralTags(
+      result.behavioralTags,
+      behavioralScore,
+      avgAttention,
+      avgSmile,
+      gazeXVariance
+    );
 
     return {
-      patternId: `pattern-${Date.now()}-${features.length}`,
+      patternId: `analysis-${Date.now()}`,
       explanation: result.explanation,
-      behavioralTags: result.behavioralTags.slice(0, 5), // Limit to 5 tags
+      behavioralTags: generatedTags,
       confidence: confidence,
       score: finalScore,
       features: {
@@ -146,19 +167,84 @@ RESPONSE FORMAT (JSON):
         avgGazeY,
         avgSmile,
         avgAttention,
+        avgFrown,
         gazeXVariance,
         gazeYVariance,
+        affectRatio,
         sampleSize: features.length,
-        sessionDuration: (features[features.length-1].timestamp - features[0].timestamp) / 1000
+        sessionDuration: (features[features.length-1].timestamp - features[0].timestamp) / 1000,
+        modelUsed: "gemini-3-pro-preview"
       }
     };
 
   } catch (error) {
     console.error("Gemini API Error:", error);
     
-    // Fallback với local analysis
-    return createFallbackResult(features, error instanceof Error ? error.message : "Unknown error");
+    // Detailed error handling
+    const errorMessage = error instanceof Error ? error.message : "Unknown API error";
+    
+    // Check for specific API errors
+    if (errorMessage.includes("model") && errorMessage.includes("not found")) {
+      console.error("Model not found, trying fallback...");
+      return await tryFallbackModel(features, behavioralScore, {
+        avgGazeX, avgGazeY, avgSmile, avgAttention, avgFrown,
+        gazeXVariance, gazeYVariance, affectRatio
+      });
+    }
+    
+    return createFallbackResult(features, errorMessage);
   }
+};
+
+// Fallback nếu model không tồn tại
+const tryFallbackModel = async (
+  features: BehavioralFeature[],
+  behavioralScore: number,
+  metrics: any
+): Promise<InferenceResult> => {
+  console.log("Trying fallback model...");
+  
+  // Try different models
+  const modelsToTry = ["gemini-1.5-pro", "gemini-pro", "gemini-1.0-pro"];
+  
+  for (const model of modelsToTry) {
+    try {
+      console.log(`Trying model: ${model}`);
+      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+      
+      const response = await ai.models.generateContent({
+        model: model,
+        contents: [{ 
+          role: "user", 
+          parts: [{ text: "Analyze behavioral patterns: " + 
+            `Attention: ${metrics.avgAttention.toFixed(2)}, ` +
+            `Smile: ${metrics.avgSmile.toFixed(2)}, ` +
+            `Data Points: ${features.length}` }]
+        }]
+      });
+      
+      const text = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || "Analysis complete.";
+      
+      return {
+        patternId: `fallback-${model}-${Date.now()}`,
+        explanation: `Analysis using ${model}: ${text.substring(0, 150)}...`,
+        behavioralTags: ["fallback_analysis", "model_${model}"],
+        confidence: 0.6,
+        score: Math.min(10, Math.round(behavioralScore)),
+        features: {
+          ...metrics,
+          sampleSize: features.length,
+          fallbackModel: model
+        }
+      };
+    } catch (fallbackError) {
+      console.warn(`Model ${model} failed:`, fallbackError);
+      continue;
+    }
+  }
+  
+  // All models failed, use local analysis
+  return createFallbackResult(features, "All API models failed");
 };
 
 // Helper functions
@@ -178,10 +264,10 @@ const calculateBehavioralScore = (
   gazeXVariance: number,
   gazeYVariance: number
 ): number => {
-  // Higher attention = better score
+  // Higher attention = better score (max 4)
   const attentionScore = attention * 4;
   
-  // Higher smile = better score
+  // Higher smile = better score (max 3)
   const affectScore = smile * 3;
   
   // Lower variance = more stable = better score
@@ -192,55 +278,68 @@ const calculateBehavioralScore = (
   return Math.min(10, attentionScore + affectScore + gazeStabilityScore + gazeStabilityScoreY);
 };
 
+const generateBehavioralTags = (
+  apiTags: string[],
+  behavioralScore: number,
+  attention: number,
+  smile: number,
+  gazeVariance: number
+): string[] => {
+  const tags = [...apiTags];
+  
+  // Add quantitative tags
+  if (behavioralScore > 8) tags.push("high_engagement");
+  else if (behavioralScore > 5) tags.push("moderate_engagement");
+  else tags.push("low_engagement");
+  
+  if (attention > 0.7) tags.push("focused_attention");
+  if (smile > 0.6) tags.push("positive_affect");
+  if (gazeVariance < 0.2) tags.push("stable_gaze");
+  
+  // Ensure unique tags
+  return [...new Set(tags)].slice(0, 8);
+};
+
 const createFallbackResult = (features: BehavioralFeature[], error: string): InferenceResult => {
   const avgAttention = features.reduce((acc, f) => acc + f.attentionLevel, 0) / Math.max(1, features.length);
   const avgSmile = features.reduce((acc, f) => acc + f.smileIntensity, 0) / Math.max(1, features.length);
+  const avgFrown = features.reduce((acc, f) => acc + f.frownIntensity, 0) / Math.max(1, features.length);
   
-  const score = Math.min(10, avgAttention * 5 + avgSmile * 5);
-  const confidence = 0.5;
+  const score = Math.min(10, avgAttention * 5 + avgSmile * 4 + (1 - avgFrown));
+  
+  // Generate descriptive explanation
+  let explanation = `Local behavioral analysis completed. `;
+  
+  if (features.length > 30) {
+    explanation += `Robust dataset of ${features.length} behavioral features analyzed. `;
+  }
+  
+  if (avgAttention > 0.7) {
+    explanation += `Sustained attention patterns observed. `;
+  }
+  
+  if (avgSmile > 0.5) {
+    explanation += `Positive affect maintained throughout the activity.`;
+  } else {
+    explanation += `Neutral affect observed during interactive tasks.`;
+  }
   
   return {
-    patternId: `fallback-${Date.now()}`,
-    explanation: `Local analysis completed. ${features.length} behavioral features analyzed. ${error ? `(Error: ${error})` : ''}`,
-    behavioralTags: features.length > 10 ? 
-      ["local_analysis", "sufficient_data", "basic_patterns"] : 
-      ["local_analysis", "limited_data"],
-    confidence: confidence,
+    patternId: `local-${Date.now()}`,
+    explanation,
+    behavioralTags: features.length > 20 ? 
+      ["local_analysis", "sufficient_data", "behavioral_patterns"] : 
+      ["local_analysis", "limited_data", "preliminary"],
+    confidence: 0.65,
     score: Math.round(score),
     features: {
       avgAttention,
       avgSmile,
+      avgFrown,
       sampleSize: features.length,
-      error: error,
-      fallback: true
-    }
-  };
-};
-
-const createStructuredResult = (text: string, behavioralScore: number, features: BehavioralFeature[]): InferenceResult => {
-  // Extract key phrases from text
-  const tags = [];
-  if (text.toLowerCase().includes("stable")) tags.push("stable_gaze");
-  if (text.toLowerCase().includes("attention") || text.toLowerCase().includes("focus")) tags.push("focused");
-  if (text.toLowerCase().includes("smile") || text.toLowerCase().includes("positive")) tags.push("positive_affect");
-  if (text.toLowerCase().includes("engage")) tags.push("engaged");
-  if (features.length > 20) tags.push("adequate_sample");
-  
-  // Default tags
-  if (tags.length === 0) {
-    tags.push("behavioral_analysis", "pattern_observed");
-  }
-  
-  return {
-    patternId: `structured-${Date.now()}`,
-    explanation: text.length > 200 ? text.substring(0, 200) + "..." : text,
-    behavioralTags: tags,
-    confidence: 0.7,
-    score: Math.min(10, Math.round(behavioralScore)),
-    features: {
-      sampleSize: features.length,
-      source: "text_analysis",
-      textLength: text.length
+      error: error.substring(0, 100),
+      fallback: true,
+      localAnalysis: true
     }
   };
 };

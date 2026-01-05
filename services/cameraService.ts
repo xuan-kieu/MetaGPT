@@ -5,21 +5,49 @@ export class CameraService {
     videoElement: HTMLVideoElement,
     constraints: MediaStreamConstraints = { 
       video: { 
-        width: { ideal: 640 },
-        height: { ideal: 480 },
-        facingMode: 'user' 
+        width: { ideal: 320, max: 640 },
+        height: { ideal: 240, max: 480 },
+        facingMode: 'user',
+        frameRate: { ideal: 15, max: 30 }
       } 
     }
   ): Promise<boolean> {
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+      // FIX: Thử constraints linh hoạt
+      this.stream = await navigator.mediaDevices.getUserMedia(constraints)
+        .catch(async () => {
+          // Fallback constraints đơn giản
+          return await navigator.mediaDevices.getUserMedia({
+            video: true
+          });
+        });
+      
+      if (!this.stream) {
+        console.warn('Camera stream không khả dụng');
+        return false;
+      }
+      
       videoElement.srcObject = this.stream;
       
+      // FIX: Chờ video ready với timeout
       return new Promise((resolve) => {
-        videoElement.onloadedmetadata = () => {
-          videoElement.play();
+        const onReady = () => {
+          videoElement.play().catch(e => console.warn('Auto-play prevented:', e));
           resolve(true);
         };
+        
+        if (videoElement.readyState >= 2) {
+          onReady();
+        } else {
+          videoElement.onloadedmetadata = onReady;
+          
+          // Timeout sau 3 giây
+          setTimeout(() => {
+            videoElement.onloadedmetadata = null;
+            console.warn('Camera timeout, proceeding with available stream');
+            resolve(false); // Vẫn cho phép tiếp tục nhưng không có camera
+          }, 3000);
+        }
       });
     } catch (error) {
       console.error('Camera access failed:', error);
@@ -46,8 +74,8 @@ export class CameraService {
     
     return this.startCamera(videoElement, {
       video: { 
-        width: { ideal: 640 },
-        height: { ideal: 480 },
+        width: { ideal: 320, max: 640 },
+        height: { ideal: 240, max: 480 },
         facingMode 
       }
     });

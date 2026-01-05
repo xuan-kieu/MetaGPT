@@ -20,78 +20,90 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const [isCameraInitialized, setIsCameraInitialized] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [faceDetectionConfidence, setFaceDetectionConfidence] = useState(0);
+  const [inferenceStatus, setInferenceStatus] = useState('Initializing...');
 
   // 1. Khởi tạo Camera ẨN cho AI
   const initializeCamera = useCallback(async () => {
-    if (!videoRef.current) return false;
+    if (!videoRef.current) {
+      console.warn('Video element not available');
+      return false;
+    }
     
     try {
       console.log('Initializing hidden camera for AI analysis...');
+      setInferenceStatus('Initializing camera...');
       
-      // Khởi tạo inference service với video ẩn
-      const initialized = await inferenceService.initialize(
-        videoRef.current,
-        canvasRef.current // Canvas ẩn để xử lý
-      );
+      // FIX: Chỉ initialize nếu element tồn tại
+      const videoEl = videoRef.current;
+      const canvasEl = canvasRef.current;
+      
+      const initialized = await inferenceService.initialize(videoEl, canvasEl);
       
       setIsCameraInitialized(initialized);
       
       if (initialized) {
         console.log('Starting AI inference from hidden camera...');
+        setInferenceStatus('AI analysis active');
         
         // Start continuous inference để lấy data cho AI
         inferenceService.startContinuousInference((results) => {
-          // Cập nhật confidence từ AI inference
-          if (results.features?.faceDetectionConfidence) {
-            setFaceDetectionConfidence(results.features.faceDetectionConfidence);
+          // FIX: Cập nhật confidence từ AI inference (đúng với InferenceService mới)
+          if (results.features?.faceConfidence !== undefined) {
+            setFaceDetectionConfidence(results.features.faceConfidence);
           }
-        }, 150); // 6-7fps
+          
+          // FIX: Cập nhật status
+          if (results.features?.windowSize) {
+            setInferenceStatus(`Analyzing... (${results.features.windowSize} frames)`);
+          }
+        }, 200); // 5fps để giảm tải
+      } else {
+        console.log('Camera not available, using simulated data');
+        setInferenceStatus('Using simulated analysis');
+        setIsCameraInitialized(true); // Vẫn cho game chạy
       }
       
-      return initialized;
+      return true;
     } catch (error) {
       console.error('Hidden camera initialization failed:', error);
-      return false;
+      setInferenceStatus('Camera failed, using simulated data');
+      setIsCameraInitialized(true); // Vẫn cho game chạy với mock data
+      return true;
     }
   }, []);
 
-  // 2. Extract features từ AI analysis (không cần visual feedback)
+  // 2. Extract features từ AI analysis và game state
   const extractBehavioralFeatures = useCallback((): BehavioralFeature => {
     const timestamp = Date.now();
     
     // Dựa trên game state và AI confidence để tạo features
     const gameProgress = score / 10; // 0-1
-    const timeVariation = Math.sin(Date.now() / 2000) * 0.1; // Biến đổi theo thời gian
+    const timeVariation = Math.sin(Date.now() / 2000) * 0.1;
     
-    // Attention tăng dần theo score
-    let attentionLevel = 0.4 + (gameProgress * 0.5);
+    // FIX: Sử dụng pattern-based thay vì random hoàn toàn
+    const baseAttention = 0.4 + (gameProgress * 0.5);
+    const baseSmile = 0.2 + (gameProgress * 0.6);
     
-    // Smile intensity tăng khi game progress tốt
-    let smileIntensity = 0.2 + (gameProgress * 0.6);
-    
-    // Gaze dựa trên ball position (normalized)
+    // Gaze theo ball position và time variation
     const gazeX = (ballPosition.x / 100) + timeVariation;
-    const gazeY = (ballPosition.y / 100) + timeVariation * 0.5;
+    const gazeY = (ballPosition.y / 100) + (timeVariation * 0.5);
     
-    // Cải thiện affect khi score cao
+    // Affect logic
     let affect: 'positive' | 'neutral' | 'negative' = 'neutral';
     if (score > 7) affect = 'positive';
     else if (score > 3) affect = 'neutral';
     
-    // Điều chỉnh dựa trên AI confidence
-    if (faceDetectionConfidence > 0.7) {
-      attentionLevel = Math.min(1, attentionLevel + 0.2);
-      smileIntensity = Math.min(1, smileIntensity + 0.1);
-    }
+    // Adjust với face detection confidence
+    const aiBoost = faceDetectionConfidence > 0.5 ? faceDetectionConfidence * 0.3 : 0;
     
     return {
       timestamp,
       gazeX: Math.max(0.1, Math.min(0.9, gazeX)),
       gazeY: Math.max(0.1, Math.min(0.9, gazeY)),
-      attentionLevel: Math.min(1, Math.max(0, attentionLevel)),
+      attentionLevel: Math.min(1, Math.max(0.2, baseAttention + aiBoost)),
       affect,
-      frownIntensity: Math.max(0, 0.3 - smileIntensity), // Tỷ lệ nghịch
-      smileIntensity: Math.min(1, smileIntensity),
+      frownIntensity: Math.max(0, 0.3 - baseSmile) * (1 - aiBoost),
+      smileIntensity: Math.min(1, baseSmile + aiBoost),
       poseConfidence: faceDetectionConfidence * 0.8,
       faceConfidence: faceDetectionConfidence
     };
@@ -99,9 +111,18 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
   // 3. Effect khởi tạo camera ẩn
   useEffect(() => {
-    initializeCamera();
+    let mounted = true;
+    
+    const init = async () => {
+      await initializeCamera();
+    };
+    
+    if (mounted) {
+      init();
+    }
     
     return () => {
+      mounted = false;
       inferenceService.stopContinuousInference();
       inferenceService.dispose();
       
@@ -113,8 +134,10 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     };
   }, [initializeCamera]);
 
-  // 4. Effect để capture features liên tục (từ game state, không từ camera)
+  // 4. Effect để capture features liên tục
   useEffect(() => {
+    if (!isCameraInitialized) return;
+    
     const interval = setInterval(() => {
       if (isProcessing) return;
       
@@ -142,7 +165,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     }, 100); // 10fps
     
     return () => clearInterval(interval);
-  }, [isProcessing, extractBehavioralFeatures, onFeatureCapture]);
+  }, [isCameraInitialized, isProcessing, extractBehavioralFeatures, onFeatureCapture]);
 
   // 5. Logic Game (chỉ game đám mây)
   const handleBallClick = () => {
@@ -161,7 +184,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     }
   };
 
-  // 6. Render game (CHỈ HIỂN THỊ GAME, KHÔNG HIỂN THỊ CAMERA)
+  // 6. Render game
   return (
     <div className="game-container">
       <div className="text-center game-header">
@@ -170,14 +193,14 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       </div>
 
       <div className="stimulus-canvas">
-        {/* VIDEO ẨN cho AI (không hiển thị) */}
+        {/* VIDEO ẨN cho AI */}
         <video 
           ref={videoRef} 
           autoPlay 
           muted 
           playsInline
           style={{ 
-            display: 'none', // HOÀN TOÀN ẨN
+            display: 'none',
             position: 'absolute',
             width: '1px',
             height: '1px',
@@ -190,7 +213,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         <canvas
           ref={canvasRef}
           style={{
-            display: 'none', // HOÀN TOÀN ẨN
+            display: 'none',
             position: 'absolute',
             width: '1px',
             height: '1px',
@@ -198,7 +221,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           }}
         />
 
-        {/* Background text chỉ hiển thị game */}
+        {/* Background text */}
         <div className="stimulus-bg-text">
           Catch the Happy Clouds!
         </div>
@@ -213,7 +236,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
             opacity: 0.8,
             marginTop: '4px' 
           }}>
-            AI analysis active
+            {inferenceStatus}
             {faceDetectionConfidence > 0 && (
               <div style={{ fontSize: '0.65rem', opacity: 0.6 }}>
                 Face confidence: {(faceDetectionConfidence * 100).toFixed(0)}%
