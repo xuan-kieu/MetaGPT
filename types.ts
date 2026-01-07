@@ -1,3 +1,4 @@
+
 export enum AppMode {
   PATIENT = 'PATIENT',
   CLINICIAN = 'CLINICIAN',
@@ -12,19 +13,13 @@ export interface BehavioralFeature {
   smileIntensity: number;
   vocalPitch?: number;
   vocalVolume?: number;
-  affect: 'positive' | 'neutral' | 'negative';
-  attentionLevel: number;
-  poseConfidence?: number;   // Thêm
-  faceConfidence?: number;   // Thêm
 }
 
 export interface InferenceResult {
-  score: number;
+  patternId: string;
   confidence: number;
-  patternId: string;          // Thêm required
-  explanation: string;        // Thêm required
-  behavioralTags: string[];   // Thêm required
-  features: Record<string, any>;
+  explanation: string;
+  behavioralTags: string[];
 }
 
 export interface LongitudinalRecord {
@@ -41,47 +36,4 @@ export interface SessionData {
   startTime: number;
   endTime?: number;
   features: BehavioralFeature[];
-}
-
-export interface Keypoint {
-  x: number;
-  y: number;
-  score: number;
-  name?: string;
-}
-
-export interface PoseResult {
-  keypoints: Keypoint[];
-  score: number;
-  normalized?: boolean;
-}
-
-export interface ExercisePose {
-  name: string;
-  expectedKeypoints: string[];
-  thresholds: {
-    minAngle: number;
-    maxAngle: number;
-    minConfidence: number;
-  };
-}
-
-export interface Pose {
-  keypoints: Keypoint[];
-  score?: number;
-  box?: any;
-}
-
-export interface PoseData {
-  jointAngles: Record<string, number>;
-  symmetry: number;
-  stability: Record<string, number>;
-  rangeOfMotion: Record<string, number>;
-}
-
-export interface ClinicalAnalysis {
-  analysisId: string;
-  [key: string]: any;
-  timestamp: string;
-  confidence?: number;
 }
