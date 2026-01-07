@@ -9,7 +9,8 @@ export class InferenceService {
   private animationFrameId: number | null = null;
   private behavioralWindow: BehavioralFeature[] = [];
   private readonly WINDOW_SIZE = 30; // Tăng để có đủ data cho temporal analysis
-  
+   private sharedBuffer: Float32Array | null = null;
+  private readonly BUFFER_SIZE = 640 * 480 * 4;
   // Face detection đơn giản dùng Canvas API (thay thế MediaPipe tạm thời)
   private faceDetectionContext: CanvasRenderingContext2D | null = null;
   private lastFaceDetection = { x: 0.5, y: 0.5, size: 0 };
@@ -18,6 +19,7 @@ export class InferenceService {
     videoElement: HTMLVideoElement, 
     canvasElement?: HTMLCanvasElement
   ): Promise<boolean> {
+    
     try {
       this.videoElement = videoElement;
       

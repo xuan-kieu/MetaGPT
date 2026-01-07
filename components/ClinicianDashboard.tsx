@@ -10,16 +10,19 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
   records, 
   latestAnalysis 
 }) => {
-  // FIX: Sử dụng metrics thay vì riskScore (theo đúng type definition)
+  
+  // Helper tính giá trị trung bình từ metrics
+  const calculateMetricAverage = (metrics?: Record<string, number>) => {
+    if (!metrics) return 0;
+    const values = Object.values(metrics);
+    if (values.length === 0) return 0;
+    return values.reduce((sum, val) => sum + val, 0) / values.length;
+  };
+
   const getLastRecordValue = () => {
     if (records.length === 0) return 0;
     const lastRecord = records[records.length - 1];
-    const metrics = lastRecord.metrics;
-    // Tính score trung bình từ các metrics
-    const values = Object.values(metrics) as number[]; 
-    
-    const total = values.reduce((sum, val) => sum + val, 0);
-    return total / values.length;
+    return calculateMetricAverage(lastRecord.metrics);
   };
 
   const displayScore = latestAnalysis
@@ -34,20 +37,15 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
     ? Math.round(latestAnalysis.confidence * 100) 
     : 0;
 
-  // FIX: Tạo dữ liệu biểu đồ thực từ records
+  // FIX: Sửa lỗi timestamp -> date và thêm safety check cho metrics
   const generateChartData = () => {
     if (records.length === 0) return [];
     return records.map((record, index) => ({
       x: index,
-      y: getRecordValue(record),
-      date: new Date(record.timestamp).toLocaleDateString()
+      y: calculateMetricAverage(record.metrics), // Sử dụng hàm helper an toàn
+      // FIX: Sử dụng record.date thay vì record.timestamp
+      date: new Date(record.date).toLocaleDateString() 
     }));
-  };
-
-  const getRecordValue = (record: LongitudinalRecord) => {
-    const metrics = record.metrics;
-    const values = Object.values(metrics);
-    return values.length > 0 ? values.reduce((a, b) => a + b) / values.length : 0;
   };
 
   const chartData = generateChartData();
