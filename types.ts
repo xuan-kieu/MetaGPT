@@ -11,8 +11,10 @@ export interface BehavioralFeature {
   gazeY: number;
   frownIntensity: number;
   smileIntensity: number;
-  vocalPitch?: number;
-  vocalVolume?: number;
+  headPitch?: number;
+  headYaw?: number;
+  headRoll?: number;
+  confidence?: number;
 }
 
 export interface InferenceResult {
