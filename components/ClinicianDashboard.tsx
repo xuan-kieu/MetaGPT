@@ -1,5 +1,5 @@
-import React from 'react';
-import { LongitudinalRecord, InferenceResult } from '../types';
+import React, { useMemo } from 'react';
+import { InferenceResult, LongitudinalRecord } from '../types';
 
 interface DashboardProps {
   records: LongitudinalRecord[];
@@ -7,243 +7,185 @@ interface DashboardProps {
 }
 
 export const ClinicianDashboard: React.FC<DashboardProps> = ({ 
-  records, 
+  records = [], 
   latestAnalysis 
 }) => {
   
-  // Helper tính giá trị trung bình từ metrics
-  const calculateMetricAverage = (metrics?: Record<string, number>) => {
-    if (!metrics) return 0;
-    const values = Object.values(metrics);
-    if (values.length === 0) return 0;
-    return values.reduce((sum, val) => sum + val, 0) / values.length;
-  };
+  const getLastRecord = () => records.length > 0 ? records[records.length - 1] : null;
+  const lastRecord = getLastRecord();
+  const currentMetrics = useMemo(() => {
+    if (latestAnalysis && latestAnalysis.features) {
+      return {
+        attention: Number(latestAnalysis.features.avgAttention) || 0,
+        smile: Number(latestAnalysis.features.avgSmile) || 0,
+        stability: Number(latestAnalysis.features.gazeStability) || 0,
+        engagement: Number(latestAnalysis.features.engagementLevel) || 0
+      };
+    } 
+    else if (lastRecord && lastRecord.metrics) {
+      return {
+        attention: Number(lastRecord.metrics.attention) || 0,
+        smile: Number(lastRecord.metrics.smile) || 0,
+        stability: Number(lastRecord.metrics.gazeStability) || 0,
+        engagement: Number(lastRecord.metrics.engagement) || 0 
+      };
+    }
+    return { attention: 0, smile: 0, stability: 0, engagement: 0 };
+  }, [latestAnalysis, lastRecord]);
 
-  const getLastRecordValue = () => {
-    if (records.length === 0) return 0;
-    const lastRecord = records[records.length - 1];
-    return calculateMetricAverage(lastRecord.metrics);
-  };
-
-  const displayScore = latestAnalysis
-    ? (latestAnalysis.confidence * 100).toFixed(1) // Scale 0-100
-    : (records.length > 0 ? getLastRecordValue().toFixed(1) : '--');
+  const displayScore = latestAnalysis 
+    ? latestAnalysis.score.toFixed(1) 
+    : (lastRecord ? lastRecord.riskScore.toFixed(1) : '--');
 
   const displayExplanation = latestAnalysis 
     ? latestAnalysis.explanation 
     : "Complete a session to generate insights";
+  const chartConfig = useMemo(() => {
+    if (!records || records.length === 0) return { data: [], maxVal: 10 };
 
-  const confidence = latestAnalysis 
-    ? Math.round(latestAnalysis.confidence * 100) 
-    : 0;
-
-  // FIX: Sửa lỗi timestamp -> date và thêm safety check cho metrics
-  const generateChartData = () => {
-    if (records.length === 0) return [];
-    return records.map((record, index) => ({
+    const data = records.map((record, index) => ({
       x: index,
-      y: calculateMetricAverage(record.metrics), // Sử dụng hàm helper an toàn
-      // FIX: Sử dụng record.date thay vì record.timestamp
-      date: new Date(record.date).toLocaleDateString() 
+      y: record.riskScore, 
+      date: new Date(record.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     }));
-  };
 
-  const chartData = generateChartData();
+    const maxVal = Math.max(...data.map(d => d.y), 10);
+
+    return { data, maxVal };
+  }, [records]);
+
+  const MetricItem = ({ label, value, icon, color }: any) => (
+    <div className="metric-item">
+      <div className="metric-header">
+        <span className="metric-label">{icon} {label}</span>
+        <span className="metric-value">{(value * 100).toFixed(0)}%</span>
+      </div>
+      <div className="metric-track">
+        <div 
+          className="metric-fill" 
+          style={{ width: `${value * 100}%`, backgroundColor: color }}
+        />
+      </div>
+    </div>
+  );
 
   return (
     <div className="dashboard-grid">
-      {/* Biểu đồ với dữ liệu thực */}
-      <div className="card">
-        <div className="card-header">
-          <h3>Longitudinal Behavioral Index</h3>
-          <p>Temporal variance tracking across sessions</p>
-        </div>
+      {/* Cột Trái: Biểu đồ & Metrics */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         
-        <div style={{ width: '100%', height: '300px', position: 'relative' }}>
-          {/* Grid lines */}
-          <div style={{ 
-            position: 'absolute', 
-            inset: 0, 
-            display: 'flex', 
-            flexDirection: 'column', 
-            justifyContent: 'space-between',
-            pointerEvents: 'none' 
-          }}>
-            {[0, 1, 2, 3, 4].map(i => (
-              <div 
-                key={i} 
-                style={{ 
-                  borderBottom: '1px dashed #f1f5f9', 
-                  flex: 1 
-                }}
-              />
-            ))}
+        {/* Chart Card */}
+        <div className="card">
+          <div className="card-header">
+            <h3>Longitudinal Index</h3>
+            <p>Temporal variance tracking across sessions</p>
           </div>
-
-          <svg 
-            viewBox="0 0 800 300" 
-            style={{ width: '100%', height: '100%', overflow: 'visible' }}
-          >
-            <defs>
-              <linearGradient id="purpleGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#6366f1" stopOpacity={0.5}/>
-                <stop offset="100%" stopColor="#6366f1" stopOpacity={0}/>
-              </linearGradient>
-            </defs>
-            
-            {/* Vẽ đường thực từ dữ liệu */}
-            {chartData.length > 1 && (
-              <>
-                <path 
-                  d={`M ${chartData.map((point, i) => 
-                    `${40 + i * (760 / (chartData.length - 1))},${250 - point.y * 200}`
-                  ).join(' L ')}`}
-                  fill="none" 
-                  stroke="#6366f1" 
-                  strokeWidth="4" 
-                  strokeLinecap="round"
-                />
-                {/* Area fill */}
-                <path 
-                  d={`M ${chartData.map((point, i) => 
-                    `${40 + i * (760 / (chartData.length - 1))},${250 - point.y * 200}`
-                  ).join(' L ')} L 760,300 L 40,300 Z`}
-                  fill="url(#purpleGradient)" 
-                  style={{ opacity: 0.3 }}
-                />
-                
-                {/* Data points */}
-                {chartData.map((point, i) => (
-                  <circle
-                    key={i}
-                    cx={40 + i * (760 / (chartData.length - 1))}
-                    cy={250 - point.y * 200}
-                    r="4"
-                    fill="#6366f1"
-                    stroke="white"
-                    strokeWidth="2"
+          
+          {/* FIX: Thêm overflow: hidden để cắt phần thừa nếu có */}
+          <div style={{ width: '100%', height: '200px', position: 'relative', overflow: 'hidden' }}>
+            <svg viewBox="0 0 800 250" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+              <defs>
+                <linearGradient id="purpleGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity={0.5}/>
+                  <stop offset="100%" stopColor="#6366f1" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              
+              {chartConfig.data.length > 0 ? (
+                <>
+                  {/* CÔNG THỨC MỚI:
+                    Y = 230 - (Giá trị / Max_Giá_Trị) * 200
+                    Điều này đảm bảo điểm cao nhất luôn nằm ở đỉnh (Y=30) và thấp nhất ở đáy (Y=230)
+                  */}
+                  <path 
+                    d={`M ${chartConfig.data.map((point, i) => 
+                      `${40 + i * (720 / (Math.max(1, chartConfig.data.length - 1)))},${230 - (point.y / chartConfig.maxVal) * 200}`
+                    ).join(' L ')}`}
+                    fill="none" stroke="#6366f1" strokeWidth="3" strokeLinecap="round"
                   />
-                ))}
-              </>
-            )}
-          </svg>
-
-          {/* X Axis Labels */}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            marginTop: '10px', 
-            fontSize: '0.75rem', 
-            color: '#94a3b8' 
-          }}>
-            {chartData.length > 0 && (
-              <>
-                <span>{chartData[0].date}</span>
-                {chartData.length > 1 && (
-                  <span>{chartData[Math.floor(chartData.length / 2)].date}</span>
-                )}
-                <span>{chartData[chartData.length - 1].date}</span>
-              </>
-            )}
+                  <path 
+                    d={`M ${chartConfig.data.map((point, i) => 
+                      `${40 + i * (720 / (Math.max(1, chartConfig.data.length - 1)))},${230 - (point.y / chartConfig.maxVal) * 200}`
+                    ).join(' L ')} L ${40 + (chartConfig.data.length - 1) * (720 / (Math.max(1, chartConfig.data.length - 1)))},250 L 40,250 Z`}
+                    fill="url(#purpleGradient)" style={{ opacity: 0.2 }}
+                  />
+                  {chartConfig.data.map((point, i) => (
+                    <circle 
+                      key={i} 
+                      cx={40 + i * (720 / (Math.max(1, chartConfig.data.length - 1)))} 
+                      cy={230 - (point.y / chartConfig.maxVal) * 200} 
+                      r="4" 
+                      fill="#6366f1" 
+                      stroke="white" 
+                      strokeWidth="2" 
+                    />
+                  ))}
+                </>
+              ) : (
+                <text x="50%" y="50%" textAnchor="middle" fill="#94a3b8">No data available</text>
+              )}
+            </svg>
+            
+            {/* Thêm trục X (Ngày tháng) */}
+            <div style={{ position: 'absolute', bottom: 0, left: 40, right: 40, display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#94a3b8' }}>
+               {chartConfig.data.length > 0 && (
+                 <>
+                   <span>{chartConfig.data[0].date}</span>
+                   <span>{chartConfig.data[chartConfig.data.length - 1].date}</span>
+                 </>
+               )}
+            </div>
           </div>
         </div>
+
+        {/* Detailed Metrics Breakdown */}
+        <div className="card">
+          <div className="card-header">
+            <h3>Session Metrics</h3>
+            <p>Behavioral breakdown</p>
+          </div>
+          <div className="metrics-grid-container">
+            <MetricItem label="Attention Span" value={currentMetrics.attention} icon="👁️" color="#3b82f6" />
+            <MetricItem label="Positive Affect" value={currentMetrics.smile} icon="😊" color="#10b981" />
+            <MetricItem label="Gaze Stability" value={currentMetrics.stability} icon="🎯" color="#8b5cf6" />
+            <MetricItem label="Engagement" value={currentMetrics.engagement} icon="🔥" color="#f59e0b" />
+          </div>
+        </div>
+
       </div>
 
-      {/* Phần bên phải - giữ nguyên */}
+      {/* Cột Phải: AI Analysis & Privacy */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        {/* AI Analysis Card */}
-        <div className="card" style={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          justifyContent: 'center', 
-          minHeight: '240px' 
-        }}>
+        <div className="card">
           <div className="card-header">
-            <h3>AI Behavioral Analysis</h3>
-            <div style={{ 
-              fontSize: '0.75rem', 
-              color: '#94a3b8',
-              marginTop: '0.25rem' 
-            }}>
-              Using MediaPipe Pose + Face Landmarks
-            </div>
+            <h3>AI Analysis</h3>
+            <p>TensorFlow.js Inference</p>
           </div>
 
-          {!latestAnalysis ? (
-            <div className="text-center" style={{ color: '#94a3b8', padding: '2rem 0' }}>
-              <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⏳</div>
-              <p style={{ fontSize: '0.875rem' }}>Waiting for session data...</p>
+          <div className="animate-in">
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '1rem' }}>
+              <span style={{ fontSize: '3rem', fontWeight: 800, color: '#6366f1', lineHeight: 1 }}>{displayScore}</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Risk Score</span>
             </div>
-          ) : (
-            <div className="animate-in fade-in zoom-in duration-500">
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'baseline', 
-                gap: '0.5rem', 
-                marginBottom: '0.5rem' 
-              }}>
-                <span style={{ 
-                  fontSize: '2.5rem', 
-                  fontWeight: 800, 
-                  color: '#6366f1' 
-                }}>
-                  {displayScore}
-                </span>
-                <span className="tag">Composite Score</span>
-              </div>
-              
-              <p style={{ 
-                fontSize: '0.875rem', 
-                color: '#475569', 
-                lineHeight: 1.6, 
-                marginBottom: '1rem' 
-              }}>
-                {displayExplanation}
-              </p>
-              
-              <div className="confidence-bar">
-                <span style={{ color: '#94a3b8' }}>Model Confidence</span>
-                <div style={{ 
-                  flex: 1, 
-                  height: '6px', 
-                  background: '#f1f5f9', 
-                  margin: '0 1rem', 
-                  borderRadius: '3px', 
-                  overflow: 'hidden' 
-                }}>
-                  <div style={{ 
-                    width: `${confidence}%`, 
-                    height: '100%', 
-                    background: '#6366f1', 
-                    transition: 'width 1s' 
-                  }} />
-                </div>
-                <span style={{ fontWeight: 700, color: '#1e293b' }}>
-                  {confidence}%
-                </span>
-              </div>
+            
+            <div className="ai-analysis-box">
+              <p>"{displayExplanation}"</p>
             </div>
-          )}
+            
+            <div className="tag-container">
+              {latestAnalysis?.behavioralTags.map(tag => (
+                <span key={tag} className="tag">{tag.replace('_', ' ')}</span>
+              ))}
+              {lastRecord?.classification && (
+                 <span className="tag">Gaze: {lastRecord.classification.gazePattern}</span>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Privacy Protocol Card */}
         <div className="card privacy-card">
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-            <div style={{ fontSize: '1.5rem' }}>🛡️</div>
-            <div>
-              <h4 style={{ fontWeight: 700, marginBottom: '0.25rem' }}>
-                Privacy Protocol
-              </h4>
-              <p style={{ 
-                fontSize: '0.75rem', 
-                color: '#94a3b8', 
-                lineHeight: 1.5 
-              }}>
-                All behavioral features are extracted on-device using WebAssembly. 
-                Zero raw video/audio data transmitted.
-              </p>
-            </div>
-          </div>
+          <h4>Privacy Active</h4>
+          <p>Processing locally. No data egress.</p>
         </div>
       </div>
     </div>

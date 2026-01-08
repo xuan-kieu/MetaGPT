@@ -1,32 +1,29 @@
-// FIX: Thay MediaPipe bằng simple pose estimation dựa trên face detection
+// Hiện tại đang là Mock Service thay thế cho MediaPipe nặng nề
 export class SimplePoseService {
   private isInitialized = false;
   
   async initialize() {
-    console.log('SimplePoseService: Using basic face detection instead of MediaPipe');
+    console.log('SimplePoseService: Initialized (Lightweight Mode)');
     this.isInitialized = true;
     return true;
   }
 
+  // Giả lập trả về keypoints
   async estimatePose(videoElement: HTMLVideoElement) {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
+    if (!this.isInitialized) await this.initialize();
 
-    // FIX: Trả về simple pose data thay vì MediaPipe
+    // TODO: Sau này thay thế bằng tfjs-models/pose-detection (MoveNet Lightning)
+    // Hiện tại trả về dữ liệu giả lập để flow không bị crash
     return {
       keypoints: Array.from({ length: 33 }, (_, i) => ({
-        x: 0.5 + Math.random() * 0.1,
-        y: 0.5 + Math.random() * 0.1,
-        score: 0.7
+        x: 0.5 + (Math.random() * 0.05), // Random jitter nhẹ
+        y: 0.5 + (Math.random() * 0.05),
+        name: `point_${i}`,
+        score: 0.8
       })),
       score: 0.8,
       timestamp: Date.now()
     };
-  }
-
-  async estimatePoseFromImage(imageElement: HTMLImageElement | HTMLCanvasElement) {
-    return this.estimatePose(document.createElement('video'));
   }
 
   dispose() {
@@ -34,6 +31,5 @@ export class SimplePoseService {
   }
 }
 
-// FIX: Export đúng type
 const instance = new SimplePoseService();
 export default instance;

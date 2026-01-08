@@ -5,22 +5,23 @@ export class CameraService {
     videoElement: HTMLVideoElement,
     constraints: MediaStreamConstraints = { 
       video: { 
-        width: { ideal: 320, max: 640 },
-        height: { ideal: 240, max: 480 },
+        width: { ideal: 640 }, // Tăng ideal lên chút để detection tốt hơn
+        height: { ideal: 480 },
         facingMode: 'user',
         frameRate: { ideal: 15, max: 30 }
       } 
     }
   ): Promise<boolean> {
     try {
-      // FIX: Thử constraints linh hoạt
-      this.stream = await navigator.mediaDevices.getUserMedia(constraints)
-        .catch(async () => {
-          // Fallback constraints đơn giản
-          return await navigator.mediaDevices.getUserMedia({
-            video: true
-          });
-        });
+      // Dừng stream cũ nếu có
+      this.stopCamera();
+
+      try {
+        this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (err) {
+        console.warn('Constraints ban đầu thất bại, thử cấu hình tối thiểu...', err);
+        this.stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
       
       if (!this.stream) {
         console.warn('Camera stream không khả dụng');
@@ -29,26 +30,28 @@ export class CameraService {
       
       videoElement.srcObject = this.stream;
       
-      // FIX: Chờ video ready với timeout
+      // Promise chờ video thực sự load
       return new Promise((resolve) => {
-        const onReady = () => {
-          videoElement.play().catch(e => console.warn('Auto-play prevented:', e));
-          resolve(true);
+        const onPlaying = () => {
+            videoElement.removeEventListener('playing', onPlaying);
+            resolve(true);
         };
-        
-        if (videoElement.readyState >= 2) {
-          onReady();
+
+        // Nếu video đã ready từ trước
+        if (videoElement.readyState >= 3) {
+            resolve(true);
         } else {
-          videoElement.onloadedmetadata = onReady;
-          
-          // Timeout sau 3 giây
-          setTimeout(() => {
-            videoElement.onloadedmetadata = null;
-            console.warn('Camera timeout, proceeding with available stream');
-            resolve(false); // Vẫn cho phép tiếp tục nhưng không có camera
-          }, 3000);
+            videoElement.addEventListener('playing', onPlaying);
+            // Backup timeout nếu sự kiện playing không bao giờ fire
+            setTimeout(() => {
+                if(videoElement.readyState >= 1) resolve(true);
+                else resolve(false);
+            }, 5000);
         }
+        
+        videoElement.play().catch(e => console.warn('Auto-play prevented:', e));
       });
+
     } catch (error) {
       console.error('Camera access failed:', error);
       return false;
@@ -67,16 +70,21 @@ export class CameraService {
   }
 
   async switchCamera(videoElement: HTMLVideoElement) {
-    this.stopCamera();
+    const currentStream = this.stream;
+    if (!currentStream) return false;
+
+    const currentTrack = currentStream.getVideoTracks()[0];
+    const currentConstraints = currentTrack?.getConstraints();
+    const currentFacingMode = currentConstraints?.facingMode;
     
-    const currentConstraints = this.stream?.getVideoTracks()[0]?.getConstraints();
-    const facingMode = currentConstraints?.facingMode === 'user' ? 'environment' : 'user';
+    // Toggle facing mode
+    const newFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
     
     return this.startCamera(videoElement, {
       video: { 
-        width: { ideal: 320, max: 640 },
-        height: { ideal: 240, max: 480 },
-        facingMode 
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        facingMode: newFacingMode 
       }
     });
   }
