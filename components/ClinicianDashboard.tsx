@@ -13,6 +13,7 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
   
   const getLastRecord = () => records.length > 0 ? records[records.length - 1] : null;
   const lastRecord = getLastRecord();
+
   const currentMetrics = useMemo(() => {
     if (latestAnalysis && latestAnalysis.features) {
       return {
@@ -37,16 +38,18 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
     ? latestAnalysis.score.toFixed(1) 
     : (lastRecord ? lastRecord.riskScore.toFixed(1) : '--');
 
+  // Việt hóa thông báo mặc định
   const displayExplanation = latestAnalysis 
     ? latestAnalysis.explanation 
-    : "Complete a session to generate insights";
+    : "Hoàn thành một phiên chơi để xem phân tích chi tiết";
+
   const chartConfig = useMemo(() => {
     if (!records || records.length === 0) return { data: [], maxVal: 10 };
 
     const data = records.map((record, index) => ({
       x: index,
       y: record.riskScore, 
-      date: new Date(record.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      date: new Date(record.date).toLocaleDateString('vi-VN', { month: 'numeric', day: 'numeric' }) // Định dạng ngày Việt Nam
     }));
 
     const maxVal = Math.max(...data.map(d => d.y), 10);
@@ -77,11 +80,10 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
         {/* Chart Card */}
         <div className="card">
           <div className="card-header">
-            <h3>Longitudinal Index</h3>
-            <p>Temporal variance tracking across sessions</p>
+            <h3>Biểu đồ theo dõi</h3>
+            <p>Biến động điểm số qua các phiên đánh giá</p>
           </div>
           
-          {/* FIX: Thêm overflow: hidden để cắt phần thừa nếu có */}
           <div style={{ width: '100%', height: '200px', position: 'relative', overflow: 'hidden' }}>
             <svg viewBox="0 0 800 250" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
               <defs>
@@ -93,10 +95,6 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
               
               {chartConfig.data.length > 0 ? (
                 <>
-                  {/* CÔNG THỨC MỚI:
-                    Y = 230 - (Giá trị / Max_Giá_Trị) * 200
-                    Điều này đảm bảo điểm cao nhất luôn nằm ở đỉnh (Y=30) và thấp nhất ở đáy (Y=230)
-                  */}
                   <path 
                     d={`M ${chartConfig.data.map((point, i) => 
                       `${40 + i * (720 / (Math.max(1, chartConfig.data.length - 1)))},${230 - (point.y / chartConfig.maxVal) * 200}`
@@ -122,11 +120,11 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
                   ))}
                 </>
               ) : (
-                <text x="50%" y="50%" textAnchor="middle" fill="#94a3b8">No data available</text>
+                <text x="50%" y="50%" textAnchor="middle" fill="#94a3b8">Chưa có dữ liệu</text>
               )}
             </svg>
             
-            {/* Thêm trục X (Ngày tháng) */}
+            {/* Trục X */}
             <div style={{ position: 'absolute', bottom: 0, left: 40, right: 40, display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#94a3b8' }}>
                {chartConfig.data.length > 0 && (
                  <>
@@ -141,14 +139,14 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
         {/* Detailed Metrics Breakdown */}
         <div className="card">
           <div className="card-header">
-            <h3>Session Metrics</h3>
-            <p>Behavioral breakdown</p>
+            <h3>Chỉ số chi tiết</h3>
+            <p>Phân tích hành vi trong phiên</p>
           </div>
           <div className="metrics-grid-container">
-            <MetricItem label="Attention Span" value={currentMetrics.attention} icon="👁️" color="#3b82f6" />
-            <MetricItem label="Positive Affect" value={currentMetrics.smile} icon="😊" color="#10b981" />
-            <MetricItem label="Gaze Stability" value={currentMetrics.stability} icon="🎯" color="#8b5cf6" />
-            <MetricItem label="Engagement" value={currentMetrics.engagement} icon="🔥" color="#f59e0b" />
+            <MetricItem label="Độ tập trung" value={currentMetrics.attention} icon="👁️" color="#3b82f6" />
+            <MetricItem label="Cảm xúc tích cực" value={currentMetrics.smile} icon="😊" color="#10b981" />
+            <MetricItem label="Ổn định ánh nhìn" value={currentMetrics.stability} icon="🎯" color="#8b5cf6" />
+            <MetricItem label="Mức độ tương tác" value={currentMetrics.engagement} icon="🔥" color="#f59e0b" />
           </div>
         </div>
 
@@ -158,14 +156,14 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <div className="card">
           <div className="card-header">
-            <h3>AI Analysis</h3>
-            <p>TensorFlow.js Inference</p>
+            <h3>Phân tích AI</h3>
+            <p>Xử lý bởi TensorFlow.js</p>
           </div>
 
           <div className="animate-in">
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '1rem' }}>
               <span style={{ fontSize: '3rem', fontWeight: 800, color: '#6366f1', lineHeight: 1 }}>{displayScore}</span>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Risk Score</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Điểm đánh giá</span>
             </div>
             
             <div className="ai-analysis-box">
@@ -177,15 +175,15 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
                 <span key={tag} className="tag">{tag.replace('_', ' ')}</span>
               ))}
               {lastRecord?.classification && (
-                 <span className="tag">Gaze: {lastRecord.classification.gazePattern}</span>
+                 <span className="tag">Ánh nhìn: {lastRecord.classification.gazePattern}</span>
               )}
             </div>
           </div>
         </div>
 
         <div className="card privacy-card">
-          <h4>Privacy Active</h4>
-          <p>Processing locally. No data egress.</p>
+          <h4>Bảo mật hoạt động</h4>
+          <p>Dữ liệu được xử lý cục bộ trên thiết bị này. Không gửi dữ liệu ra bên ngoài.</p>
         </div>
       </div>
     </div>

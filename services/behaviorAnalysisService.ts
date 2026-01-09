@@ -64,8 +64,8 @@ const calculateMetrics = (features: BehavioralFeature[], classification: Behavio
     avgGazeY: avg('gazeY'),
     avgSmile: avg('smileIntensity'),
     avgAttention: avg('attentionLevel'),
-    gazeStability: stabilityScore,   // Đã thêm cho App.tsx
-    engagementLevel: engagementScore, // Đã thêm cho App.tsx
+    gazeStability: stabilityScore,
+    engagementLevel: engagementScore,
     sampleSize: features.length
   };
 };

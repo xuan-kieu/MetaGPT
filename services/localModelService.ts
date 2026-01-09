@@ -41,7 +41,6 @@ export class LocalModelService {
     return this.ruleBasedAnalysis(features);
   }
   
-  // --- Updated Rule Based Logic to match Types.ts ---
   
   private ruleBasedAnalysis(features: BehavioralFeature[]) {
     const classification: BehavioralClassification = {
@@ -65,7 +64,6 @@ export class LocalModelService {
     };
   }
   
-  // Helpers
   private determineGazePattern(features: BehavioralFeature[]): BehavioralClassification['gazePattern'] {
     const variance = this.calculateGazeVariance(features);
     if (variance < 0.1) return 'focused';
@@ -109,7 +107,6 @@ export class LocalModelService {
     return 'brief';
   }
 
-  // FIX: Updated to match types.ts ('consistent' | 'variable' | 'random')
   private determineResponseConsistency(features: BehavioralFeature[]): BehavioralClassification['responseConsistency'] {
     const variance = this.calculateGazeVariance(features);
     if (variance < 0.2) return 'consistent';
@@ -117,7 +114,6 @@ export class LocalModelService {
     return 'random';
   }
 
-  // FIX: Updated to match types.ts ('persistent' | 'moderate' | 'fleeting')
   private determineTaskPersistence(features: BehavioralFeature[]): BehavioralClassification['taskPersistence'] {
      const avgAttention = features.reduce((a, b) => a + b.attentionLevel, 0) / features.length;
      if (avgAttention > 0.7) return 'persistent';

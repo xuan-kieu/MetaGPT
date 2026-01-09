@@ -16,6 +16,11 @@ export interface BehavioralFeature {
   vocalVolume?: number;
   affect: 'positive' | 'neutral' | 'negative';
   attentionLevel: number;
+  targetX?: number;
+  targetY?: number;
+  targetSize?: number;
+  audioStimulus?: string | null;
+  isLookingAtTarget?: boolean;
 }
 
 export interface BehavioralClassification {
@@ -37,7 +42,7 @@ export interface InferenceResult {
   explanation: string;
   behavioralTags: string[];
   behavioralClassification?: BehavioralClassification;
-  features: Record<string, any>; // Chứa avgAttention, gazeStability, etc.
+  features: Record<string, any>;
 }
 
 export interface LongitudinalRecord {
@@ -61,4 +66,19 @@ export interface SessionData {
   startTime: number;
   endTime?: number;
   features: BehavioralFeature[];
+}
+export interface GameTheme {
+  id: string;
+  name: string;
+  assets: string[];
+  background: string;
+}
+
+export interface GameConfig {
+  ageRange: string;
+  jumpInterval: number;
+  duration: number;
+  targetSizeRange: [number, number];
+  audioPrompts: string[];
+  theme: GameTheme;
 }

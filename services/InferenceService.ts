@@ -1,9 +1,7 @@
-// ... (Giữ nguyên phần import và logic detectSimpleFace)
 import { BehavioralFeature, InferenceResult } from "../types";
 import cameraService from "./cameraService";
 
 export class InferenceService {
-  // ... (Giữ nguyên các thuộc tính class)
   private videoElement: HTMLVideoElement | null = null;
   private canvasElement: HTMLCanvasElement | null = null;
   private faceDetectionContext: CanvasRenderingContext2D | null = null;
@@ -13,7 +11,6 @@ export class InferenceService {
   private readonly WINDOW_SIZE = 30;
 
   async initialize(videoElement: HTMLVideoElement, canvasElement?: HTMLCanvasElement): Promise<boolean> {
-     // ... (Giữ nguyên logic initialize như cũ)
      try {
       this.videoElement = videoElement;
       const cameraStarted = await cameraService.startCamera(videoElement);
@@ -32,7 +29,6 @@ export class InferenceService {
     }
   }
   
-  // ... (Giữ nguyên detectSimpleFace)
    private detectSimpleFace(video: HTMLVideoElement) {
     if (!this.faceDetectionContext || !this.canvasElement) return null;
     const ctx = this.faceDetectionContext;
