@@ -1,6 +1,7 @@
+// src/gameConfig.ts
 import { GameConfig, GameTheme } from './types'; 
 
-// 1. Export THEMES để App.tsx có thể dùng
+// 1. Export THEMES (Giữ nguyên)
 export const THEMES: Record<string, GameTheme> = {
   FRUITS: {
     id: 'fruits',
@@ -28,11 +29,21 @@ export const THEMES: Record<string, GameTheme> = {
   }
 };
 
-// 2. Hàm nhận thêm themeId
-export const getGameConfig = (age: number, themeId: string): GameConfig => {
+// 2. Hàm nhận thêm specificAsset
+export const getGameConfig = (age: number, themeId: string, specificAsset: string | null): GameConfig => {
   
-  // Lấy theme dựa trên ID người dùng chọn, mặc định là ANIMALS nếu lỗi
-  const selectedTheme = Object.values(THEMES).find(t => t.id === themeId) || THEMES.ANIMALS;
+  // Lấy theme gốc
+  const originalTheme = Object.values(THEMES).find(t => t.id === themeId) || THEMES.ANIMALS;
+
+  // Tạo một bản sao của theme để không làm hỏng dữ liệu gốc
+  // Nếu có specificAsset, mảng assets chỉ chứa đúng 1 hình đó
+  const themeToUse = {
+    ...originalTheme,
+    assets: specificAsset ? [specificAsset] : originalTheme.assets
+  };
+
+  // Cố định âm thanh theo yêu cầu
+  const fixedAudio = ['ba ơi', 'mẹ ơi', 'a'];
 
   // Cấu hình Độ khó (Difficulty) dựa trên Tuổi
   if (age <= 4) {
@@ -41,8 +52,8 @@ export const getGameConfig = (age: number, themeId: string): GameConfig => {
       jumpInterval: 4000, 
       duration: 60,       
       targetSizeRange: [120, 180], 
-      audioPrompts: ['A', 'Ba', 'Mẹ', 'Cá'],
-      theme: selectedTheme
+      audioPrompts: fixedAudio, // SỬA: Chỉ dùng âm thanh này
+      theme: themeToUse         // SỬA: Dùng theme đã lọc hình ảnh
     };
   }
   
@@ -52,8 +63,8 @@ export const getGameConfig = (age: number, themeId: string): GameConfig => {
       jumpInterval: 2500, 
       duration: 60,
       targetSizeRange: [80, 140], 
-      audioPrompts: ['Quả Táo', 'Con Mèo', 'Màu Đỏ'],
-      theme: selectedTheme
+      audioPrompts: fixedAudio,
+      theme: themeToUse
     };
   }
 
@@ -62,7 +73,7 @@ export const getGameConfig = (age: number, themeId: string): GameConfig => {
     jumpInterval: 1500, 
     duration: 60,
     targetSizeRange: [60, 100], 
-    audioPrompts: ['Bên trái', 'Bên phải', 'Mỉm cười'],
-    theme: selectedTheme
+    audioPrompts: fixedAudio,
+    theme: themeToUse
   };
 };

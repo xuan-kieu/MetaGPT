@@ -6,6 +6,68 @@ interface DashboardProps {
   latestAnalysis?: InferenceResult;
 }
 
+// --- PHẦN 1: TỪ ĐIỂN DỊCH THUẬT ---
+const TAG_TRANSLATIONS: Record<string, string> = {
+  // Gaze (Ánh nhìn)
+  'GAZE_FOCUSED': 'Tập trung',
+  'GAZE_NOT_FOCUSED': 'Mất tập trung',
+  'GAZE_DISTRACTED': 'Xao nhãng',
+  'FOCUSED': 'Tập trung',
+  'NOT_FOCUSED': 'Không tập trung',
+  
+  // Engagement (Mức độ tương tác)
+  'ENGAGEMENT_HIGH': 'Tương tác cao',
+  'ENGAGEMENT_MEDIUM': 'Tương tác trung bình',
+  'ENGAGEMENT_LOW': 'Tương tác thấp',
+  
+  // Affect/Emotion (Cảm xúc)
+  'AFFECT_POSITIVE': 'Cảm xúc tích cực',
+  'AFFECT_NEGATIVE': 'Cảm xúc tiêu cực',
+  'AFFECT_NEUTRAL': 'Cảm xúc bình thường',
+  
+  // Các từ khóa khác
+  'HAPPY': 'Vui vẻ',
+  'SAD': 'Buồn',
+  'NEUTRAL': 'Bình thường'
+};
+
+// Hàm hỗ trợ dịch tag
+const translateTag = (tag: string): string => {
+  if (!tag) return '';
+  const normalizedKey = tag.toUpperCase().replace(/\s+/g, '_');
+  return TAG_TRANSLATIONS[normalizedKey] || tag;
+};
+
+// --- PHẦN 2: HÀM SINH CÂU GIẢI THÍCH TIẾNG VIỆT (THÊM VÀO ĐÂY) ---
+const generateVietnameseExplanation = (analysis?: InferenceResult): string => {
+  if (!analysis || !analysis.features) {
+    return "Hoàn thành một phiên chơi để xem phân tích chi tiết.";
+  }
+
+  const { avgAttention, engagementLevel, avgSmile } = analysis.features;
+  
+  // 1. Đánh giá ánh nhìn
+  let gazeText = "";
+  if (avgAttention >= 0.7) gazeText = "Ánh nhìn tập trung tốt";
+  else if (avgAttention >= 0.4) gazeText = "Ánh nhìn ở mức ổn định";
+  else gazeText = "Có dấu hiệu xao nhãng";
+
+  // 2. Đánh giá tương tác
+  let engageText = "";
+  if (engagementLevel >= 0.7) engageText = "tương tác rất tích cực";
+  else if (engagementLevel >= 0.4) engageText = "mức độ tương tác trung bình";
+  else engageText = "tương tác còn hạn chế";
+
+  // 3. Đánh giá cảm xúc (Thêm phần này cho đầy đủ)
+  let emotionText = "";
+  if (avgSmile >= 0.5) emotionText = ", tâm trạng vui vẻ";
+  else if (avgSmile >= 0.2) emotionText = ", biểu cảm tích cực";
+  
+  // Ghép lại thành câu hoàn chỉnh
+  return `Hệ thống ghi nhận: ${gazeText} với ${engageText}${emotionText}.`;
+};
+
+// --- PHẦN 3: COMPONENT CHÍNH ---
 export const ClinicianDashboard: React.FC<DashboardProps> = ({ 
   records = [], 
   latestAnalysis 
@@ -38,10 +100,9 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
     ? latestAnalysis.score.toFixed(1) 
     : (lastRecord ? lastRecord.riskScore.toFixed(1) : '--');
 
-  // Việt hóa thông báo mặc định
-  const displayExplanation = latestAnalysis 
-    ? latestAnalysis.explanation 
-    : "Hoàn thành một phiên chơi để xem phân tích chi tiết";
+  // --- SỬ DỤNG HÀM MỚI TẠI ĐÂY ---
+  // Thay thế logic cũ bằng cách gọi hàm generateVietnameseExplanation
+  const displayExplanation = generateVietnameseExplanation(latestAnalysis);
 
   const chartConfig = useMemo(() => {
     if (!records || records.length === 0) return { data: [], maxVal: 10 };
@@ -49,7 +110,7 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
     const data = records.map((record, index) => ({
       x: index,
       y: record.riskScore, 
-      date: new Date(record.date).toLocaleDateString('vi-VN', { month: 'numeric', day: 'numeric' }) // Định dạng ngày Việt Nam
+      date: new Date(record.date).toLocaleDateString('vi-VN', { month: 'numeric', day: 'numeric' })
     }));
 
     const maxVal = Math.max(...data.map(d => d.y), 10);
@@ -124,7 +185,6 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
               )}
             </svg>
             
-            {/* Trục X */}
             <div style={{ position: 'absolute', bottom: 0, left: 40, right: 40, display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#94a3b8' }}>
                {chartConfig.data.length > 0 && (
                  <>
@@ -149,7 +209,6 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
             <MetricItem label="Mức độ tương tác" value={currentMetrics.engagement} icon="🔥" color="#f59e0b" />
           </div>
         </div>
-
       </div>
 
       {/* Cột Phải: AI Analysis & Privacy */}
@@ -166,16 +225,19 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
               <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Điểm đánh giá</span>
             </div>
             
+            {/* Hiển thị câu giải thích đã được Việt hóa */}
             <div className="ai-analysis-box">
-              <p>"{displayExplanation}"</p>
+              <p style={{ fontStyle: 'italic' }}>"{displayExplanation}"</p>
             </div>
             
             <div className="tag-container">
               {latestAnalysis?.behavioralTags.map(tag => (
-                <span key={tag} className="tag">{tag.replace('_', ' ')}</span>
+                <span key={tag} className="tag">{translateTag(tag)}</span>
               ))}
               {lastRecord?.classification && (
-                 <span className="tag">Ánh nhìn: {lastRecord.classification.gazePattern}</span>
+                 <span className="tag">
+                    Ánh nhìn: {translateTag(lastRecord.classification.gazePattern)}
+                 </span>
               )}
             </div>
           </div>

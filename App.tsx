@@ -4,7 +4,7 @@ import { GameEngine } from './components/GameEngine';
 import { ClinicianDashboard } from './components/ClinicianDashboard';
 import { analyzeBehavioralPatterns } from './services/behaviorAnalysisService';
 import inferenceService from './services/InferenceService'; 
-import { THEMES } from './gameConfig'; // Đảm bảo đã import THEMES
+import { THEMES } from './gameConfig'; 
 import './styles.css';
 
 const App: React.FC = () => {
@@ -12,7 +12,8 @@ const App: React.FC = () => {
   const [sessionFeatures, setSessionFeatures] = useState<BehavioralFeature[]>([]);
   
   // State quản lý luồng
-  const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null); // Thêm lại state Theme
+  const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
+  const [selectedAsset, setSelectedAsset] = useState<string | null>(null); // THÊM STATE NÀY
   const [selectedAge, setSelectedAge] = useState<number | null>(null);
 
   const [records, setRecords] = useState<LongitudinalRecord[]>([
@@ -25,39 +26,58 @@ const App: React.FC = () => {
   const [currentAnalysis, setCurrentAnalysis] = useState<InferenceResult | undefined>();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // --- MÀN HÌNH 1: CHỌN HÌNH ẢNH (Đã thêm lại) ---
+  // --- MÀN HÌNH 1: CHỌN HÌNH ẢNH CỤ THỂ ---
   const ThemeSelection = () => (
-    <div className="card" style={{ maxWidth: '600px', margin: '4rem auto', textAlign: 'center' }}>
-      <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Bước 1: Chọn hình ảnh bé thích</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
-        {Object.values(THEMES).map((theme) => (
-          <button 
-            key={theme.id}
-            className="nav-pill" 
-            style={{ 
-              padding: '1.5rem', border: '2px solid #e2e8f0', 
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem',
-              backgroundColor: theme.background, cursor: 'pointer'
-            }} 
-            onClick={() => setSelectedThemeId(theme.id)}
-          >
-            <span style={{ fontSize: '2.5rem' }}>{theme.assets[0]}</span> 
-            <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{theme.name}</span>
-          </button>
-        ))}
-      </div>
+    <div className="card" style={{ maxWidth: '800px', margin: '4rem auto', textAlign: 'center' }}>
+      <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Bước 1: Chọn 1 hình ảnh bé thích nhất</h3>
+      
+      {/* Duyệt qua từng chủ đề */}
+      {Object.values(THEMES).map((theme) => (
+        <div key={theme.id} style={{ marginBottom: '2rem' }}>
+            <h4 style={{ textAlign: 'left', marginLeft: '10px', color: '#64748b', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>
+                {theme.name}
+            </h4>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem', justifyContent: 'center' }}>
+                {/* Duyệt qua từng hình ảnh trong chủ đề */}
+                {theme.assets.map((asset) => (
+                    <button 
+                        key={asset}
+                        className="nav-pill" 
+                        style={{ 
+                            fontSize: '3rem', 
+                            padding: '1rem', 
+                            border: '2px solid #e2e8f0',
+                            backgroundColor: theme.background,
+                            cursor: 'pointer',
+                            minWidth: '80px',
+                            transition: 'transform 0.2s'
+                        }} 
+                        onClick={() => {
+                            setSelectedThemeId(theme.id);
+                            setSelectedAsset(asset); // Lưu hình ảnh cụ thể
+                        }}
+                    >
+                        {asset}
+                    </button>
+                ))}
+            </div>
+        </div>
+      ))}
     </div>
   );
 
   // --- MÀN HÌNH 2: CHỌN TUỔI ---
   const AgeSelection = () => (
     <div className="card" style={{ maxWidth: '400px', margin: '4rem auto', textAlign: 'center' }}>
-      <button onClick={() => setSelectedThemeId(null)} style={{ float: 'left', border: 'none', background: 'transparent', cursor: 'pointer' }}>⬅️ Quay lại</button>
+      <button onClick={() => { setSelectedThemeId(null); setSelectedAsset(null); }} style={{ float: 'left', border: 'none', background: 'transparent', cursor: 'pointer' }}>⬅️ Quay lại</button>
       <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', clear: 'both' }}>Bước 2: Chọn độ tuổi</h3>
-      <div style={{ display: 'grid', gap: '1rem', marginTop: '1rem' }}>
-        <button className="nav-pill" style={{ padding: '1rem', border: '2px solid #e2e8f0' }} onClick={() => setSelectedAge(3)}>👶 2 - 4 Tuổi (Chậm)</button>
-        <button className="nav-pill" style={{ padding: '1rem', border: '2px solid #e2e8f0' }} onClick={() => setSelectedAge(6)}>👦 5 - 7 Tuổi (Vừa)</button>
-        <button className="nav-pill" style={{ padding: '1rem', border: '2px solid #e2e8f0' }} onClick={() => setSelectedAge(9)}>🧑 8+ Tuổi (Nhanh)</button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+         {/* Hiển thị hình đã chọn */}
+         <div style={{ fontSize: '4rem', margin: '1rem 0' }}>{selectedAsset}</div>
+         
+         <button className="nav-pill" style={{ padding: '1rem', border: '2px solid #e2e8f0' }} onClick={() => setSelectedAge(3)}>👶 2 - 4 Tuổi (Chậm)</button>
+         <button className="nav-pill" style={{ padding: '1rem', border: '2px solid #e2e8f0' }} onClick={() => setSelectedAge(6)}>👦 5 - 7 Tuổi (Vừa)</button>
+         <button className="nav-pill" style={{ padding: '1rem', border: '2px solid #e2e8f0' }} onClick={() => setSelectedAge(9)}>🧑 8+ Tuổi (Nhanh)</button>
       </div>
     </div>
   );
@@ -69,7 +89,6 @@ const App: React.FC = () => {
   const handleSessionEnd = async (features: BehavioralFeature[]) => {
     console.log("📥 Kết thúc game. Nhận được:", features.length, "dữ liệu");
     
-    // Nếu dữ liệu quá ít (do lỗi camera hoặc tắt sớm), tạo dữ liệu giả để test giao diện
     const processingFeatures = features.length > 0 ? features : Array(30).fill({
         timestamp: Date.now(), gazeX: 0.5, gazeY: 0.5, affect: 'neutral',
         attentionLevel: 0.6, smileIntensity: 0.4, poseConfidence: 1, faceConfidence: 1, frownIntensity: 0
@@ -117,8 +136,9 @@ const App: React.FC = () => {
     } finally {
       setIsAnalyzing(false);
       setSessionFeatures([]);
-      setSelectedAge(null);     // Reset
-      setSelectedThemeId(null); // Reset
+      setSelectedAge(null); 
+      setSelectedThemeId(null);
+      setSelectedAsset(null); // Reset asset
     }
   };
 
@@ -146,29 +166,31 @@ const App: React.FC = () => {
 
       <main className="main-content">
         {mode === AppMode.PATIENT ? (
-          // --- SỬA LUỒNG ĐIỀU HƯỚNG TẠI ĐÂY ---
-          !selectedThemeId ? (
+          // --- LOGIC ĐIỀU HƯỚNG MỚI ---
+          !selectedAsset ? ( // Kiểm tra đã chọn hình chưa
             <ThemeSelection />
           ) : !selectedAge ? (
             <AgeSelection />
           ) : (
             <GameEngine 
               age={selectedAge} 
-              themeId={selectedThemeId}
+              themeId={selectedThemeId || 'animals'}
+              specificAsset={selectedAsset} // Truyền hình đã chọn vào
               onFeatureCapture={handleFeatureCapture} 
               onSessionEnd={handleSessionEnd} 
             />
           )
         ) : (
           <div className="animate-in">
-            <div className="dashboard-header">
-              <div className="dashboard-title"><h2>Clinical Overview</h2></div>
-              <div className="dashboard-stats">
+             <div className="dashboard-header">
+               {/* ... Giữ nguyên phần Dashboard ... */}
+               <div className="dashboard-title"><h2>Clinical Overview</h2></div>
+               <div className="dashboard-stats">
                  <div className="stat-card"><div className="stat-value">{records.length}</div><div className="stat-label">Sessions</div></div>
                  <div className="stat-card"><div className="stat-value">{currentAnalysis?.score || '--'}</div><div className="stat-label">Last Score</div></div>
-              </div>
-            </div>
-            <ClinicianDashboard records={records} latestAnalysis={currentAnalysis} />
+               </div>
+             </div>
+             <ClinicianDashboard records={records} latestAnalysis={currentAnalysis} />
           </div>
         )}
       </main>

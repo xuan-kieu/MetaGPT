@@ -6,6 +6,7 @@ import { getGameConfig } from '../gameConfig';
 interface GameEngineProps {
   age: number;
   themeId: string;
+  specificAsset: string | null; // THÊM PROP NÀY
   onFeatureCapture: (feature: BehavioralFeature) => void;
   onSessionEnd: (features: BehavioralFeature[]) => void;
 }
@@ -13,21 +14,17 @@ interface GameEngineProps {
 export const GameEngine: React.FC<GameEngineProps> = ({ 
   age,
   themeId,
+  specificAsset, // Nhận prop
   onFeatureCapture, 
   onSessionEnd 
 }) => {
   const [config, setConfig] = useState<GameConfig | null>(null);
-  const [currentTarget, setCurrentTarget] = useState({ x: 50, y: 50, size: 100, content: 'Starting...' });
-  
-  // State bộ đếm thời gian (bắt đầu từ 0)
+  const [currentTarget, setCurrentTarget] = useState({ x: 50, y: 50, size: 100, content: '...' });
   const [timeElapsed, setTimeElapsed] = useState(0);
-  
   const [currentAudio, setCurrentAudio] = useState<string | null>(null);
   
   const featuresBuffer = useRef<BehavioralFeature[]>([]); 
   const hasEnded = useRef(false);
-
-  // REF Pattern: Lưu hàm finishGame vào ref để dùng trong setInterval
   const finishGameRef = useRef<() => void>(() => {});
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -39,10 +36,10 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
   // --- 1. SETUP CONFIG ---
   useEffect(() => {
-    const loadedConfig = getGameConfig(age, themeId); 
+    // Truyền specificAsset vào hàm lấy config
+    const loadedConfig = getGameConfig(age, themeId, specificAsset); 
     setConfig(loadedConfig);
     
-    // Reset mọi thứ khi config đổi (tuổi/theme đổi)
     setTimeElapsed(0);
     hasEnded.current = false;
     featuresBuffer.current = [];
@@ -50,20 +47,19 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     setCurrentTarget({
         x: 50, y: 50, 
         size: loadedConfig.targetSizeRange[1], 
-        content: loadedConfig.theme.assets[0]
+        content: loadedConfig.theme.assets[0] // Lúc này mảng assets chỉ có 1 hình
     });
-  }, [age, themeId]);
+  }, [age, themeId, specificAsset]);
 
   // --- HÀM KẾT THÚC ---
   const finishGame = useCallback(() => {
     if (hasEnded.current) return;
     hasEnded.current = true;
-    console.log(`⏹️ KẾT THÚC. Gửi ${featuresBuffer.current.length} features.`);
+    console.log(`⏹️ KẾT THÚC.`);
     inferenceService.dispose();
     onSessionEnd(featuresBuffer.current);
   }, [onSessionEnd]);
 
-  // Cập nhật ref mỗi khi finishGame thay đổi (để setInterval luôn gọi hàm mới nhất)
   useEffect(() => {
     finishGameRef.current = finishGame;
   }, [finishGame]);
@@ -72,13 +68,12 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   useEffect(() => {
     if (!config) return;
 
-    // Chạy ngay lập tức lần đầu
-    // (setInterval sẽ chờ hết interval mới chạy lần đầu, nên ta không cần gọi ngay ở đây 
-    // vì ở useEffect số 1 đã set vị trí đầu tiên rồi)
-
     const jumper = setInterval(() => {
+        // Vì trong gameConfig ta đã set assets = [specificAsset]
+        // Nên dòng này sẽ luôn lấy ra đúng hình ảnh đó
         const assets = config.theme.assets;
-        const content = assets[Math.floor(Math.random() * assets.length)];
+        const content = assets[0]; // Luôn lấy phần tử đầu tiên
+
         const minSize = config.targetSizeRange[0];
         const maxSize = config.targetSizeRange[1];
         const size = Math.floor(Math.random() * (maxSize - minSize) + minSize);
@@ -93,36 +88,29 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     return () => clearInterval(jumper);
   }, [config]);
 
-  // --- 3. LOGIC ĐẾM GIỜ (TIMER - FIX DEPENDENCY) ---
+  // --- 3. LOGIC ĐẾM GIỜ ---
   useEffect(() => {
-    // Nếu chưa có config thì chưa chạy timer
     if (!config) return;
-
-    console.log("⏱️ Timer bắt đầu chạy...");
-
     const timer = setInterval(() => {
       setTimeElapsed(prev => {
         const nextTime = prev + 1;
-
-        // Check điều kiện dừng
         if (nextTime >= config.duration) {
           clearInterval(timer);
-          // Gọi hàm finish thông qua REF -> Không cần dependency
           finishGameRef.current(); 
           return config.duration;
         }
         return nextTime;
       });
     }, 1000);
-
     return () => clearInterval(timer);
-  }, [config]); // QUAN TRỌNG: Chỉ chạy lại khi Config thay đổi.
+  }, [config]);
 
-  // --- 4. LOGIC ÂM THANH ---
+  // --- 4. LOGIC ÂM THANH (Chỉ "ba ơi", "mẹ ơi", "a") ---
   useEffect(() => {
     if (!config) return;
     const audioInterval = setInterval(() => {
         if (Math.random() > 0.5) {
+            // config.audioPrompts giờ chỉ chứa ['ba ơi', 'mẹ ơi', 'a']
             const txt = config.audioPrompts[Math.floor(Math.random() * config.audioPrompts.length)];
             playAudioPrompt(txt);
         }
@@ -204,7 +192,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         height: '600px', 
         overflow: 'hidden'
     }}>
-      
       <video ref={videoRef} autoPlay muted playsInline style={{ position: 'absolute', width: '1px', opacity: 0.01 }} />
       <canvas ref={canvasRef} style={{ display: 'none' }} />
 
@@ -219,7 +206,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       </div>
 
       <div className="stimulus-canvas" style={{ background: 'transparent', boxShadow: 'none', border: 'none', position: 'absolute', inset: 0 }}>
-        
         <div
           style={{
             position: 'absolute',
@@ -238,7 +224,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         >
           {currentTarget.content}
         </div>
-        
         <div style={{ position: 'absolute', bottom: 10, left: 10, zIndex: 5 }} className="status-label">
            {isCameraInitialized ? `👁️ AI: ${inferenceStatus}` : '⏳ Camera...'}
         </div>
