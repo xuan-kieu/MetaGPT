@@ -21,6 +21,9 @@ export interface BehavioralFeature {
   targetSize?: number;
   audioStimulus?: string | null;
   isLookingAtTarget?: boolean;
+  gameId?: string;
+  sessionTime?: number;
+  childName?: string;
 }
 
 export interface BehavioralClassification {
@@ -67,6 +70,7 @@ export interface SessionData {
   endTime?: number;
   features: BehavioralFeature[];
 }
+
 export interface GameTheme {
   id: string;
   name: string;
@@ -81,4 +85,54 @@ export interface GameConfig {
   targetSizeRange: [number, number];
   audioPrompts: string[];
   theme: GameTheme;
+}
+
+export interface GameEngineProps {
+  age: number;
+  themeId: string;
+  specificAsset: string | null;
+  childName: string;
+  onFeatureCapture: (feature: BehavioralFeature) => void;
+  onSessionEnd: (features: BehavioralFeature[]) => void;
+  
+  // Props mới từ App.tsx
+  gameId?: string;
+  gameTitle?: string;
+  gameDuration?: number;
+}
+
+export interface GameModule {
+  id: string;
+  name: string;
+  duration: string;
+  isOptional?: boolean;
+}
+
+export interface AgeGroupConfig {
+  id: string;
+  label: string;
+  description: string;
+  targetTime: string;
+  numericAge: number;
+  games: GameModule[];
+}
+
+export interface SubGameProps {
+  config: GameConfig;
+  latestAIResult: React.MutableRefObject<InferenceResult | null>;
+  onFeatureCapture: (feature: BehavioralFeature) => void;
+  timeElapsed: number;
+  childName: string;
+  gameDuration?: number;
+}
+
+
+export interface SquirrelCharacterProps {
+  isClapping: boolean;
+  scale?: number;
+}
+
+export interface PlaceholderGameProps extends SubGameProps {
+  title: string;
+  color: string;
 }

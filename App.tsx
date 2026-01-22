@@ -1,102 +1,159 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { AppMode, BehavioralFeature, LongitudinalRecord, InferenceResult } from './types';
-import { GameEngine } from './components/GameEngine';
+import GameEngine from './components/GameEngine';
 import { ClinicianDashboard } from './components/ClinicianDashboard';
 import { analyzeBehavioralPatterns } from './services/behaviorAnalysisService';
 import inferenceService from './services/InferenceService'; 
-import { THEMES } from './gameConfig'; 
 import './styles.css';
 
+// --- CẤU HÌNH UI ---
+type AgeGroupInfo = {
+  id: string;
+  label: string;
+  description: string;
+  targetTime: string;
+  numericAge: number;
+  previewList: string[];
+};
+
+const PROGRAM_INFO: Record<string, AgeGroupInfo> = {
+  GROUP_A: {
+    id: 'GROUP_A',
+    label: 'Nhóm 12-18 tháng',
+    description: 'Vận động tinh & Tương tác sớm',
+    targetTime: '10 phút',
+    numericAge: 15,
+    previewList: ['Bong Bóng Bay', 'Vỗ Tay', 'Quay Lại', 'Ú Òa', 'Đồ Chơi']
+  },
+  GROUP_B: {
+    id: 'GROUP_B',
+    label: 'Nhóm 18-24 tháng',
+    description: 'Ngôn ngữ & Bắt chước',
+    targetTime: '15 phút',
+    numericAge: 20, 
+    previewList: ['Chỉ Tay', 'Xếp Tháp', 'Tiếng Kêu', 'Cho Ăn', 'Tìm Bóng']
+  },
+  GROUP_C: {
+    id: 'GROUP_C',
+    label: 'Nhóm 2-3 tuổi',
+    description: 'Nhận thức & Cảm xúc',
+    targetTime: '18 phút',
+    numericAge: 30,
+    previewList: ['Về Đúng Nhà', 'Cảm Xúc', 'Đến Lượt', 'Ghép Cặp', 'Mê Cung']
+  },
+  GROUP_D: {
+    id: 'GROUP_D',
+    label: 'Nhóm 3-5 tuổi',
+    description: 'Tư duy logic & Xã hội',
+    targetTime: '20 phút',
+    numericAge: 48,
+    previewList: ['Vì Sao Thế', 'Kể Chuyện', 'Cửa Hàng', 'Chỉ Dẫn', 'Quy Tắc']
+  }
+};
+
+// --- TÁCH COMPONENT START SCREEN RA NGOÀI ---
+// Việc này giúp React không hủy/tạo lại input khi gõ phím
+interface StartScreenProps {
+  childName: string;
+  setChildName: (name: string) => void;
+  selectedGroupId: string | null;
+  setSelectedGroupId: (id: string) => void;
+  onStartSession: () => void;
+  programInfo: Record<string, AgeGroupInfo>;
+}
+
+const StartScreen: React.FC<StartScreenProps> = ({ 
+  childName, 
+  setChildName, 
+  selectedGroupId, 
+  setSelectedGroupId, 
+  onStartSession,
+  programInfo
+}) => {
+  const currentProgramInfo = selectedGroupId ? programInfo[selectedGroupId] : null;
+
+  return (
+    <div className="setup-container">
+      <h2 className="setup-title">Thiết lập buổi đánh giá</h2>
+      
+      <div className="input-group">
+        <label>Tên bé:</label>
+        <input
+          type="text"
+          value={childName}
+          // React xử lý tốt tiếng Việt ở đây nếu component không bị unmount
+          onChange={(e) => setChildName(e.target.value)} 
+          placeholder="Nhập tên bé (Ví dụ: Bé An)..."
+          className="name-input"
+          autoFocus // Tự động focus khi vào màn hình
+        />
+      </div>
+
+      <div className="program-grid">
+        {Object.values(programInfo).map((group) => (
+          <div 
+            key={group.id}
+            onClick={() => setSelectedGroupId(group.id)}
+            className={`program-card ${selectedGroupId === group.id ? 'selected' : ''}`}
+          >
+            <div className="card-header">
+              <span className="card-label">{group.label}</span>
+              {selectedGroupId === group.id && <span className="check-icon">✓</span>}
+            </div>
+            <div className="card-meta">⏱ {group.targetTime}</div>
+            <div className="card-desc">{group.description}</div>
+          </div>
+        ))}
+      </div>
+
+      {currentProgramInfo && (
+        <div className="preview-box">
+          <h4>📋 Lộ trình bài tập dự kiến:</h4>
+          <div className="tags-container">
+            {currentProgramInfo.previewList.map((gameName, idx) => (
+              <span key={idx} className="game-tag">{idx + 1}. {gameName}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <button
+        onClick={onStartSession}
+        disabled={!selectedGroupId || !childName.trim()}
+        className="start-btn"
+      >
+        🚀 Bắt đầu Session
+      </button>
+    </div>
+  );
+};
+
+// --- APP CHÍNH ---
 const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>(AppMode.PATIENT);
-  const [sessionFeatures, setSessionFeatures] = useState<BehavioralFeature[]>([]);
   
-  // State quản lý luồng
-  const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
-  const [selectedAsset, setSelectedAsset] = useState<string | null>(null); // THÊM STATE NÀY
-  const [selectedAge, setSelectedAge] = useState<number | null>(null);
-
-  const [records, setRecords] = useState<LongitudinalRecord[]>([
-    { 
-      id: '1', date: '2023-11-01', riskScore: 12, observations: ['Baseline'], features: [],
-      metrics: { attention: 0.5, smile: 0.2, gazeStability: 0.6, engagement: 0.5 }
-    }
-  ]);
+  // State
+  const [childName, setChildName] = useState<string>('');
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [isSessionActive, setIsSessionActive] = useState(false);
   
+  // Dashboard State
+  const [records, setRecords] = useState<LongitudinalRecord[]>([]);
   const [currentAnalysis, setCurrentAnalysis] = useState<InferenceResult | undefined>();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // --- MÀN HÌNH 1: CHỌN HÌNH ẢNH CỤ THỂ ---
-  const ThemeSelection = () => (
-    <div className="card" style={{ maxWidth: '800px', margin: '4rem auto', textAlign: 'center' }}>
-      <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Bước 1: Chọn 1 hình ảnh bé thích nhất</h3>
-      
-      {/* Duyệt qua từng chủ đề */}
-      {Object.values(THEMES).map((theme) => (
-        <div key={theme.id} style={{ marginBottom: '2rem' }}>
-            <h4 style={{ textAlign: 'left', marginLeft: '10px', color: '#64748b', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>
-                {theme.name}
-            </h4>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem', justifyContent: 'center' }}>
-                {/* Duyệt qua từng hình ảnh trong chủ đề */}
-                {theme.assets.map((asset) => (
-                    <button 
-                        key={asset}
-                        className="nav-pill" 
-                        style={{ 
-                            fontSize: '3rem', 
-                            padding: '1rem', 
-                            border: '2px solid #e2e8f0',
-                            backgroundColor: theme.background,
-                            cursor: 'pointer',
-                            minWidth: '80px',
-                            transition: 'transform 0.2s'
-                        }} 
-                        onClick={() => {
-                            setSelectedThemeId(theme.id);
-                            setSelectedAsset(asset); // Lưu hình ảnh cụ thể
-                        }}
-                    >
-                        {asset}
-                    </button>
-                ))}
-            </div>
-        </div>
-      ))}
-    </div>
-  );
+  const currentProgramInfo = useMemo(() => 
+    selectedGroupId ? PROGRAM_INFO[selectedGroupId] : null, 
+  [selectedGroupId]);
 
-  // --- MÀN HÌNH 2: CHỌN TUỔI ---
-  const AgeSelection = () => (
-    <div className="card" style={{ maxWidth: '400px', margin: '4rem auto', textAlign: 'center' }}>
-      <button onClick={() => { setSelectedThemeId(null); setSelectedAsset(null); }} style={{ float: 'left', border: 'none', background: 'transparent', cursor: 'pointer' }}>⬅️ Quay lại</button>
-      <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', clear: 'both' }}>Bước 2: Chọn độ tuổi</h3>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
-         {/* Hiển thị hình đã chọn */}
-         <div style={{ fontSize: '4rem', margin: '1rem 0' }}>{selectedAsset}</div>
-         
-         <button className="nav-pill" style={{ padding: '1rem', border: '2px solid #e2e8f0' }} onClick={() => setSelectedAge(3)}>👶 2 - 4 Tuổi (Chậm)</button>
-         <button className="nav-pill" style={{ padding: '1rem', border: '2px solid #e2e8f0' }} onClick={() => setSelectedAge(6)}>👦 5 - 7 Tuổi (Vừa)</button>
-         <button className="nav-pill" style={{ padding: '1rem', border: '2px solid #e2e8f0' }} onClick={() => setSelectedAge(9)}>🧑 8+ Tuổi (Nhanh)</button>
-      </div>
-    </div>
-  );
-
-  const handleFeatureCapture = useCallback((feature: BehavioralFeature) => {
-    setSessionFeatures(prev => [...prev, feature]);
-  }, []);
-
-  const handleSessionEnd = async (features: BehavioralFeature[]) => {
-    console.log("📥 Kết thúc game. Nhận được:", features.length, "dữ liệu");
-    
-    const processingFeatures = features.length > 0 ? features : Array(30).fill({
-        timestamp: Date.now(), gazeX: 0.5, gazeY: 0.5, affect: 'neutral',
-        attentionLevel: 0.6, smileIntensity: 0.4, poseConfidence: 1, faceConfidence: 1, frownIntensity: 0
-    });
-
+  const handleSessionEnd = useCallback(async (allFeatures: BehavioralFeature[]) => {
+    console.log("🏁 Session Complete. Total Data Points:", allFeatures.length);
+    setIsSessionActive(false);
     setIsAnalyzing(true);
     setMode(AppMode.CLINICIAN);
-    
+
+    const processingFeatures = allFeatures.length > 0 ? allFeatures : [];
+
     try {
       const inferenceResult = await inferenceService.processStreamingData(processingFeatures);
       const behavioralAnalysis = await analyzeBehavioralPatterns(processingFeatures);
@@ -115,16 +172,19 @@ const App: React.FC = () => {
       
       const feats = behavioralAnalysis.features;
       const newRecord: LongitudinalRecord = {
-        id: `session-${Date.now()}`,
+        id: `sess-${Date.now()}`,
         date: new Date().toISOString(),
         riskScore: combinedAnalysis.score,
-        observations: [combinedAnalysis.explanation],
+        observations: [
+            `Chương trình: ${currentProgramInfo?.label}`,
+            ...combinedAnalysis.behavioralTags
+        ],
         features: [],
         metrics: {
-          attention: Number(feats.avgAttention) || 0.5,
-          smile: Number(feats.avgSmile) || 0.3,
-          gazeStability: Number(feats.gazeStability) || 0.6,
-          engagement: Number(feats.engagementLevel) || 0.5
+          attention: Number(feats.avgAttention) || 0,
+          smile: Number(feats.avgSmile) || 0,
+          gazeStability: Number(feats.gazeStability) || 0,
+          engagement: Number(feats.engagementLevel) || 0
         },
         classification: behavioralAnalysis.behavioralClassification
       };
@@ -132,68 +192,118 @@ const App: React.FC = () => {
       setRecords(prev => [...prev, newRecord]);
       
     } catch (error) {
-      console.error("Lỗi phân tích:", error);
+      console.error("Analysis Failed:", error);
     } finally {
       setIsAnalyzing(false);
-      setSessionFeatures([]);
-      setSelectedAge(null); 
-      setSelectedThemeId(null);
-      setSelectedAsset(null); // Reset asset
+      setChildName('');
+      setSelectedGroupId(null);
     }
-  };
+  }, [currentProgramInfo]);
+
+  const handleFeatureStream = useCallback((feature: BehavioralFeature) => {
+    // Stream logic
+  }, []);
 
   return (
     <div className="app-container">
       {isAnalyzing && (
-        <div className="analysis-status-overlay">
-          <div className="analysis-status-content">
-            <div className="spinner-large"></div>
-            <h3>Đang phân tích hành vi...</h3>
+        <div className="analysis-overlay">
+          <div className="loading-box">
+            <div className="spinner"></div>
+            <h3>Đang phân tích hành vi AI...</h3>
+            <p>Vui lòng đợi trong giây lát</p>
           </div>
         </div>
       )}
-      
+
       <header className="main-header">
-        <div className="logo-section">
-          <div className="logo-box">NP</div>
-          <div className="logo-text"><h1>NeuroPath</h1></div>
+        <div className="brand">
+          <div className="logo">NP</div>
+          <h1>NeuroPath</h1>
         </div>
-        <div className="nav-controls">
-          <button onClick={() => setMode(AppMode.PATIENT)} className={`nav-pill ${mode === AppMode.PATIENT ? 'active' : ''}`}>Patient App</button>
-          <button onClick={() => setMode(AppMode.CLINICIAN)} className={`nav-pill ${mode === AppMode.CLINICIAN ? 'active' : ''}`}>Dashboard</button>
+        <div className="nav-tabs">
+          <button 
+            onClick={() => { setMode(AppMode.PATIENT); setIsSessionActive(false); }} 
+            className={mode === AppMode.PATIENT ? 'active' : ''}
+          >
+            Patient App
+          </button>
+          <button 
+            onClick={() => setMode(AppMode.CLINICIAN)} 
+            className={mode === AppMode.CLINICIAN ? 'active' : ''}
+          >
+            Dashboard
+          </button>
         </div>
       </header>
 
-      <main className="main-content">
+      <main className="main-body">
         {mode === AppMode.PATIENT ? (
-          // --- LOGIC ĐIỀU HƯỚNG MỚI ---
-          !selectedAsset ? ( // Kiểm tra đã chọn hình chưa
-            <ThemeSelection />
-          ) : !selectedAge ? (
-            <AgeSelection />
+          isSessionActive && currentProgramInfo ? (
+            <div className="game-wrapper">
+              <GameEngine 
+                age={currentProgramInfo.numericAge} 
+                childName={childName}
+                themeId="default"
+                specificAsset={null}
+                onFeatureCapture={handleFeatureStream}
+                onSessionEnd={handleSessionEnd}
+              />
+            </div>
           ) : (
-            <GameEngine 
-              age={selectedAge} 
-              themeId={selectedThemeId || 'animals'}
-              specificAsset={selectedAsset} // Truyền hình đã chọn vào
-              onFeatureCapture={handleFeatureCapture} 
-              onSessionEnd={handleSessionEnd} 
+            // Gọi Component đã tách ra ở đây
+            <StartScreen 
+              childName={childName}
+              setChildName={setChildName}
+              selectedGroupId={selectedGroupId}
+              setSelectedGroupId={setSelectedGroupId}
+              onStartSession={() => setIsSessionActive(true)}
+              programInfo={PROGRAM_INFO}
             />
           )
         ) : (
-          <div className="animate-in">
+          <div className="dashboard-wrapper">
              <div className="dashboard-header">
-               {/* ... Giữ nguyên phần Dashboard ... */}
-               <div className="dashboard-title"><h2>Clinical Overview</h2></div>
-               <div className="dashboard-stats">
-                 <div className="stat-card"><div className="stat-value">{records.length}</div><div className="stat-label">Sessions</div></div>
-                 <div className="stat-card"><div className="stat-value">{currentAnalysis?.score || '--'}</div><div className="stat-label">Last Score</div></div>
-               </div>
+                <h2>Hồ sơ bệnh án điện tử</h2>
+                <div className="stats-row">
+                  <div className="stat-pill">Tổng Sessions: <b>{records.length}</b></div>
+                </div>
              </div>
              <ClinicianDashboard records={records} latestAnalysis={currentAnalysis} />
           </div>
         )}
       </main>
+
+      <style>{`
+        .app-container { font-family: 'Segoe UI', sans-serif; background: #f8fafc; min-height: 100vh; display: flex; flexDirection: column; }
+        .main-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .brand { display: flex; align-items: center; gap: 10px; }
+        .logo { background: #6366f1; color: white; padding: 5px 10px; border-radius: 6px; font-weight: bold; }
+        .nav-tabs button { background: none; border: none; padding: 0.5rem 1rem; margin-left: 10px; cursor: pointer; color: #64748b; font-weight: 600; }
+        .nav-tabs button.active { color: #6366f1; background: #e0e7ff; border-radius: 20px; }
+        .setup-container { max-width: 900px; margin: 2rem auto; padding: 2rem; background: white; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .setup-title { text-align: center; margin-bottom: 2rem; color: #1e293b; }
+        .input-group { margin-bottom: 2rem; text-align: left; max-width: 400px; margin-left: auto; margin-right: auto; }
+        .input-group label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #475569; }
+        .name-input { width: 100%; padding: 0.8rem; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 1rem; }
+        .program-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .program-card { padding: 1.5rem; border: 1px solid #e2e8f0; border-radius: 12px; cursor: pointer; transition: all 0.2s; background: white; text-align: left; }
+        .program-card:hover { transform: translateY(-2px); border-color: #cbd5e1; }
+        .program-card.selected { border: 2px solid #6366f1; background: #eff6ff; box-shadow: 0 4px 10px rgba(99, 102, 241, 0.15); }
+        .card-header { display: flex; justify-content: space-between; font-weight: 700; color: #334155; font-size: 1.1rem; margin-bottom: 0.5rem; }
+        .card-meta { font-size: 0.9rem; color: #64748b; margin-bottom: 0.5rem; }
+        .card-desc { color: #0f172a; }
+        .preview-box { background: #f1f5f9; padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; text-align: left; }
+        .tags-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .game-tag { background: white; padding: 6px 12px; border-radius: 20px; border: 1px solid #cbd5e1; font-size: 0.9rem; color: #475569; }
+        .start-btn { width: 100%; max-width: 350px; padding: 1.2rem; background: #6366f1; color: white; border: none; border-radius: 8px; font-size: 1.2rem; font-weight: bold; cursor: pointer; display: block; margin: 0 auto; box-shadow: 0 4px 6px rgba(99, 102, 241, 0.3); }
+        .start-btn:disabled { background: #cbd5e1; cursor: not-allowed; box-shadow: none; }
+        .game-wrapper { width: 100%; height: calc(100vh - 80px); }
+        .analysis-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.9); z-index: 999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .loading-box { text-align: center; background: white; padding: 3rem; border-radius: 16px; box-shadow: 0 20px 25px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; }
+        .spinner { width: 50px; height: 50px; border: 4px solid #e2e8f0; border-top-color: #6366f1; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1.5rem; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 };
