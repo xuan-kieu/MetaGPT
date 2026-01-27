@@ -3,14 +3,38 @@ import { BehavioralFeature, InferenceResult, GameConfig, GameEngineProps } from 
 import inferenceService from '../services/InferenceService';
 import { getGameConfig } from '../gameConfig';
 
-// Import các game con
+// --- IMPORT CÁC GAME CON ---
+
+// A. Nhóm 12-18 tháng
 import G1_1_Balloon from '../ageGroup/Group12_18/G1_1_Balloon';
 import G1_2_Clapping from '../ageGroup/Group12_18/G1_2_Clapping';
 import G1_3_Attention from '../ageGroup/Group12_18/G1_3_Attention';
 import G1_4_Peekaboo from '../ageGroup/Group12_18/G1_4_Peekaboo';
 import G1_5_ToyTracking from '../ageGroup/Group12_18/G1_5_ToyTracking';
 
-// --- CSS GỐC TOÀN CẢNH (GLOBAL THEME) ---
+// B. Nhóm 18-24 tháng
+import G2_1_ChiTayTinhMat from '../ageGroup/Group18_24/G2_1_ChiTayTinhMat';
+import G2_2_XayThapCao from '../ageGroup/Group18_24/G2_2_XayThapCao';
+import G2_3_TiengKeuCuaAi from '../ageGroup/Group18_24/G2_3_TiengKeuCuaAi';
+import G2_4_ChoBupBeAn from '../ageGroup/Group18_24/G2_4_ChoBupBeAn';
+import G2_5_TimBongHinh from '../ageGroup/Group18_24/G2_5_TimBongHinh';
+
+// C. Nhóm 2-3 tuổi
+import G3_1_VeDungNhaNao from '../ageGroup/Group2_3_year/G3_1_VeDungNhaNao';
+import G3_2_CamXucGiDay from '../ageGroup/Group2_3_year/G3_2_CamXucGiDay';
+import G3_3_DenLuotConRoii from '../ageGroup/Group2_3_year/G3_3_DenLuotConRoii';
+import G3_4_TimHinhGhepCap from '../ageGroup/Group2_3_year/G3_4_TimHinhGhepCap';
+import G3_5_MeCungDonGian from '../ageGroup/Group2_3_year/G3_5_MeCungDonGian';
+
+// D. Nhóm 3-5 tuổi
+import G4_1_ViSaoTheNhi from '../ageGroup/Group3_5year/G4_1_ViSaoTheNhi';
+import G4_2_SapXepCauChuyen from '../ageGroup/Group3_5year/G4_2_SapXepCauChuyen';
+import G4_3_CuaHangTiHon from '../ageGroup/Group3_5year/G4_3_CuaHangTiHon';
+import G4_4_LamTheoChiDan from '../ageGroup/Group3_5year/G4_4_LamTheoChiDan';
+import G4_5_GiaiMaQuyTac from '../ageGroup/Group3_5year/G4_5_GiaiMaQuyTac';
+
+
+// --- CSS GỐC TOÀN CẢNH (GLOBAL THEME) - KHÔNG ĐỔI ---
 const globalStyles = `
   /* 1. VARIABLES & THEME */
   :root {
@@ -134,30 +158,74 @@ interface AgeGroupConfig {
   games: Array<{
     id: string;
     name: string;
-    duration: number;
+    duration: number; // seconds
     component: React.ComponentType<any>;
   }>;
 }
 
+// Hàm này đã được cập nhật logic để chọn game theo độ tuổi
 const getAgeGroupConfig = (age: number): AgeGroupConfig | null => {
-  if (age >= 12 && age <= 18) {
+  // A. Nhóm 12-18 tháng (12 <= age < 18)
+  if (age >= 12 && age < 18) {
     return {
-      totalDuration: 10 * 60,
+      totalDuration: 10 * 60, // ~10 mins
       games: [
-        { id: 'G1.1', name: 'Bong Bóng Biết Bay', duration: 120, component: G1_1_Balloon },
-        { id: 'G1.2', name: 'Vỗ Tay Vui Nhộn', duration: 120, component: G1_2_Clapping },
-        { id: 'G1.3', name: 'Bé Ơi Quay Lại Nào', duration: 120, component: G1_3_Attention },
-        { id: 'G1.4', name: 'Ú Òa Kỳ Diệu', duration: 120, component: G1_4_Peekaboo },
-        { id: 'G1.5', name: 'Theo Dõi Đồ Chơi', duration: 120, component: G1_5_ToyTracking }
+        { id: 'G1.1', name: 'Bong Bóng Biết Bay', duration: 120, component: G1_1_Balloon },      // 2p
+        { id: 'G1.2', name: 'Vỗ Tay Vui Nhộn', duration: 120, component: G1_2_Clapping },       // 2p
+        { id: 'G1.3', name: 'Bé Ơi Quay Lại Nào', duration: 120, component: G1_3_Attention },     // 2p
+        { id: 'G1.4', name: 'Ú Òa Kỳ Diệu', duration: 120, component: G1_4_Peekaboo },         // 2p
+        { id: 'G1.5', name: 'Theo Dõi Đồ Chơi', duration: 120, component: G1_5_ToyTracking }    // 2p
       ]
     };
   }
-  // Mặc định cho các nhóm khác để test
+
+  // B. Nhóm 18-24 tháng (18 <= age < 24)
+  if (age >= 18 && age < 24) {
+    return {
+      totalDuration: 13 * 60, // ~13 mins
+      games: [
+        { id: 'G2.1', name: 'Chỉ Tay Tinh Mắt', duration: 180, component: G2_1_ChiTayTinhMat },  // 3p
+        { id: 'G2.2', name: 'Xây Tháp Cao', duration: 180, component: G2_2_XayThapCao },         // 3p
+        { id: 'G2.3', name: 'Tiếng Kêu Của Ai', duration: 120, component: G2_3_TiengKeuCuaAi },  // 2p
+        { id: 'G2.4', name: 'Cho Búp Bê Ăn', duration: 180, component: G2_4_ChoBupBeAn },       // 3p
+        { id: 'G2.5', name: 'Tìm Bóng Hình', duration: 120, component: G2_5_TimBongHinh }       // 2p
+      ]
+    };
+  }
+
+  // C. Nhóm 2-3 tuổi (24 <= age < 36)
+  if (age >= 24 && age < 36) {
+    return {
+      totalDuration: 15 * 60, // ~15 mins
+      games: [
+        { id: 'G3.1', name: 'Về Đúng Nhà Nào', duration: 180, component: G3_1_VeDungNhaNao },   // 3p
+        { id: 'G3.2', name: 'Cảm Xúc Gì Đây', duration: 180, component: G3_2_CamXucGiDay },     // 3p
+        { id: 'G3.3', name: 'Đến Lượt Con Rồi', duration: 180, component: G3_3_DenLuotConRoii }, // 3p
+        { id: 'G3.4', name: 'Tìm Hình Ghép Cặp', duration: 180, component: G3_4_TimHinhGhepCap }, // 3p
+        { id: 'G3.5', name: 'Mê Cung Đơn Giản', duration: 180, component: G3_5_MeCungDonGian }  // 3p
+      ]
+    };
+  }
+
+  // D. Nhóm 3-5 tuổi (36 <= age <= 60)
+  if (age >= 36 && age <= 60) {
+    return {
+      totalDuration: 18 * 60, // ~18 mins
+      games: [
+        { id: 'G4.1', name: 'Vì Sao Thế Nhỉ', duration: 240, component: G4_1_ViSaoTheNhi },     // 4p
+        { id: 'G4.2', name: 'Sắp Xếp Câu Chuyện', duration: 240, component: G4_2_SapXepCauChuyen }, // 4p
+        { id: 'G4.3', name: 'Cửa Hàng Tí Hon', duration: 240, component: G4_3_CuaHangTiHon },    // 4p
+        { id: 'G4.4', name: 'Làm Theo Chỉ Dẫn', duration: 180, component: G4_4_LamTheoChiDan },  // 3p
+        { id: 'G4.5', name: 'Giải Mã Quy Tắc', duration: 180, component: G4_5_GiaiMaQuyTac }    // 3p
+      ]
+    };
+  }
+
+  // Fallback nếu không thuộc nhóm nào (hoặc để test)
   return {
       totalDuration: 10 * 60,
       games: [
-        { id: 'G1.1', name: 'Bong Bóng (Demo)', duration: 120, component: G1_1_Balloon },
-        { id: 'G1.2', name: 'Vỗ Tay (Demo)', duration: 120, component: G1_2_Clapping }
+        { id: 'TEST', name: 'Chưa hỗ trợ độ tuổi này', duration: 60, component: G1_1_Balloon }
       ]
   };
 };
@@ -187,8 +255,13 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
   // 1. Init Config
   useEffect(() => {
+    // Gọi hàm helper mới cập nhật để lấy danh sách game
     const group = getAgeGroupConfig(age);
     setAgeGroup(group);
+    
+    // Reset game index về 0 mỗi khi đổi lứa tuổi
+    setCurrentGameIndex(0);
+
     if (group) {
         const loadedConfig = getGameConfig(age, themeId, specificAsset);
         setConfig(loadedConfig);

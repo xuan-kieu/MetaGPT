@@ -14,7 +14,7 @@ export interface BehavioralFeature {
   smileIntensity: number;
   vocalPitch?: number;
   vocalVolume?: number;
-  affect: 'positive' | 'neutral' | 'negative';
+  affect: 'positive' | 'neutral' | 'negative' | 'surprised';
   attentionLevel: number;
   targetX?: number;
   targetY?: number;
@@ -94,8 +94,6 @@ export interface GameEngineProps {
   childName: string;
   onFeatureCapture: (feature: BehavioralFeature) => void;
   onSessionEnd: (features: BehavioralFeature[]) => void;
-  
-  // Props mới từ App.tsx
   gameId?: string;
   gameTitle?: string;
   gameDuration?: number;
@@ -135,4 +133,31 @@ export interface SquirrelCharacterProps {
 export interface PlaceholderGameProps extends SubGameProps {
   title: string;
   color: string;
+}
+
+export enum UserRole {
+  PARENT = 'parent',
+  CLINICIAN = 'clinician'
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  childProfiles?: ChildProfile[];
+  clinicId?: string;
+}
+
+export interface ChildProfile {
+  id: string;
+  name: string;
+  birthDate: string;
+  gender: 'male' | 'female' | 'other';
+  region: string;
+  primaryLanguage: string;
+  age?: {
+    years: number;
+    months: number;
+  };
 }
