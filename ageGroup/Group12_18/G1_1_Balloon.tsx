@@ -1,9 +1,29 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { SubGameProps, BehavioralFeature } from '../../types';
 
-const G1_1_Balloon: React.FC<SubGameProps> = ({ 
-  latestAIResult, 
-  onFeatureCapture, 
+// Mở rộng interface để bao gồm các trường dữ liệu mới cho AI
+interface ExtendedFeature extends BehavioralFeature {
+  isSpecialActive: boolean;
+  isLookingAtSocial: boolean;
+  micLevel?: number;
+}
+
+interface Balloon {
+  id: number;
+  x: number;
+  y: number;
+  color: string;
+  size: number;
+  speed: number;
+  swingPhase: number;
+  swingSpeed: number;
+  swingAmplitude: number;
+  isSpecial?: boolean;
+}
+
+const G1_1_Balloon: React.FC<SubGameProps> = ({
+  latestAIResult,
+  onFeatureCapture,
   timeElapsed,
 }) => {
   // --- CSS NỘI BỘ ---
@@ -28,7 +48,7 @@ const G1_1_Balloon: React.FC<SubGameProps> = ({
       border-radius: 20px;
       font-size: 16px;
       font-weight: bold;
-      z-index: 10;
+      z-index: 30;
       display: flex;
       align-items: center;
       gap: 5px;
@@ -42,24 +62,6 @@ const G1_1_Balloon: React.FC<SubGameProps> = ({
       z-index: 5;
     }
 
-    .balloon:hover {
-      transform: scale(1.1);
-    }
-
-    /* Hiệu ứng bay lắc lư */
-    @keyframes float {
-      0%, 100% { transform: translateY(0) rotate(0deg); }
-      50% { transform: translateY(-10px) rotate(2deg); }
-    }
-
-    .balloon:nth-child(odd) {
-      animation: float 3s ease-in-out infinite;
-    }
-
-    .balloon:nth-child(even) {
-      animation: float 4s ease-in-out infinite 0.5s;
-    }
-
     .balloon-body {
       width: 100%;
       height: 100%;
@@ -70,7 +72,6 @@ const G1_1_Balloon: React.FC<SubGameProps> = ({
                   inset 5px 5px 10px rgba(255, 255, 255, 0.3);
     }
 
-    /* Dây bóng */
     .balloon-body::before {
       content: '';
       position: absolute;
@@ -82,17 +83,39 @@ const G1_1_Balloon: React.FC<SubGameProps> = ({
       background: linear-gradient(to bottom, #666, #999);
     }
 
-    /* Nút thắt bóng */
-    .balloon-body::after {
-      content: '';
+    .special-balloon {
+      z-index: 15;
+      filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.6));
+    }
+
+    .special-face {
       position: absolute;
-      bottom: -4px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 10px;
-      height: 6px;
-      background: var(--balloon-color);
-      border-radius: 4px;
+      top: 20%;
+      left: 0;
+      width: 100%;
+      text-align: center;
+      font-size: 35px;
+      user-select: none;
+    }
+
+    .pip-container {
+      position: absolute;
+      top: 80px;
+      right: 20px;
+      width: 160px;
+      height: 120px;
+      border: 4px solid white;
+      border-radius: 15px;
+      overflow: hidden;
+      z-index: 40;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+      background: #2c3e50;
+      animation: slideIn 0.5s ease-out;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(200px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
     }
 
     .balloon-instruction {
@@ -109,67 +132,28 @@ const G1_1_Balloon: React.FC<SubGameProps> = ({
       border-radius: 15px;
       margin: 0 40px;
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-      animation: pulse 2s infinite;
       z-index: 10;
     }
 
-    .balloon-title {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      color: white;
-      font-size: 32px;
-      font-weight: bold;
-      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-      background: rgba(0, 0, 0, 0.4);
-      padding: 10px 20px;
-      border-radius: 15px;
-      backdrop-filter: blur(5px);
-      z-index: 10;
+    @keyframes float {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-10px) rotate(2deg); }
     }
-
-    @keyframes pulse {
-      0% { transform: scale(1); }
-      50% { transform: scale(1.05); }
-      100% { transform: scale(1); }
-    }
-
-    @media (max-width: 768px) {
-      .balloon-title {
-        font-size: 24px;
-        padding: 8px 16px;
-      }
-      
-      .balloon-instruction {
-        font-size: 18px;
-        margin: 0 20px;
-        padding: 12px;
-      }
-      
-      .balloon-game-timer {
-        font-size: 14px;
-        padding: 8px 16px;
-      }
-    }
+    .balloon-anim { animation: float 3s ease-in-out infinite; }
   `;
 
-  // --- LOGIC ---
-  interface Balloon {
-    id: number; 
-    x: number; 
-    y: number; 
-    color: string; 
-    size: number;
-    speed: number; 
-    swingPhase: number; 
-    swingSpeed: number; 
-    swingAmplitude: number;
-  }
-  
+  // --- LOGIC & STATE ---
   const [balloons, setBalloons] = useState<Balloon[]>([]);
+  const [specialBalloon, setSpecialBalloon] = useState<Balloon | null>(null);
+  const [showPiP, setShowPiP] = useState(false);
+  
   const nextBalloonId = useRef(0);
   const balloonsRef = useRef<Balloon[]>([]);
+  const specialRef = useRef<Balloon | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   balloonsRef.current = balloons;
+  specialRef.current = specialBalloon;
 
   const brightColors = useMemo(() => [
     '#FF9ED8', '#7ED4FF', '#FFF679', '#D9A5FF',
@@ -178,19 +162,16 @@ const G1_1_Balloon: React.FC<SubGameProps> = ({
 
   const GAME_DURATION = 120;
 
+  // Effect tạo bóng thường
   useEffect(() => {
-    // SỬA LẠI LOGIC MOVE: Bóng bay LÊN thì Y phải tăng (nếu dùng bottom)
-    // Code gốc bạn dùng y - speed nhưng css lại để bottom: y%. 
-    // -> Logic đúng: Start y = -20 (dưới đáy), y tăng dần lên 120.
-
     const createBalloon = () => {
       const newBalloon: Balloon = {
         id: nextBalloonId.current++,
         x: 15 + Math.random() * 70,
-        y: -20, // Bắt đầu từ dưới màn hình
+        y: -20,
         color: brightColors[Math.floor(Math.random() * brightColors.length)],
         size: 60 + Math.random() * 40,
-        speed: 0.15 + Math.random() * 0.15, 
+        speed: 0.15 + Math.random() * 0.15,
         swingPhase: Math.random() * Math.PI * 2,
         swingSpeed: 0.015 + Math.random() * 0.015,
         swingAmplitude: 8 + Math.random() * 10
@@ -201,8 +182,8 @@ const G1_1_Balloon: React.FC<SubGameProps> = ({
     const initialTimer = setTimeout(createBalloon, 1000);
     
     const scheduleNextBalloon = () => {
-      if (nextBalloonId.current > 20) return;
-      const delay = 4000 + Math.random() * 5000;
+      if (nextBalloonId.current > 30) return; // Limit số lượng bóng
+      const delay = 3000 + Math.random() * 4000;
       return setTimeout(() => {
         createBalloon();
         scheduleNextBalloon();
@@ -212,87 +193,160 @@ const G1_1_Balloon: React.FC<SubGameProps> = ({
     const scheduleTimer = setTimeout(scheduleNextBalloon, 2000);
 
     const moveInterval = setInterval(() => {
+      // Move bóng thường
       setBalloons(prev => prev.map(b => ({
           ...b,
-          y: b.y + b.speed, // Tăng Y để bay lên (vì dùng css bottom)
+          y: b.y + b.speed,
           x: b.x + Math.sin(b.swingPhase) * b.swingAmplitude * 0.02,
           swingPhase: b.swingPhase + b.swingSpeed
-        })).filter(b => b.y < 120)); // Xóa khi bay quá đỉnh
+      })).filter(b => b.y < 120));
+
+      // Move bóng đặc biệt
+      setSpecialBalloon(prev => {
+        if (!prev) return null;
+        const newY = prev.y + prev.speed;
+        return newY > 120 ? null : { ...prev, y: newY };
+      });
     }, 40);
 
-    return () => { 
-      clearTimeout(initialTimer); 
-      clearTimeout(scheduleTimer as any); 
-      clearInterval(moveInterval); 
+    return () => {
+      clearTimeout(initialTimer);
+      clearTimeout(scheduleTimer as any);
+      clearInterval(moveInterval);
     };
   }, [brightColors]);
 
+  // Effect kích hoạt sự kiện đặc biệt (Bóng to + PiP) sau 3 giây
+  useEffect(() => {
+    const specialEventTimer = setTimeout(() => {
+      // 1. Khởi tạo bóng đặc biệt
+      const sb: Balloon = {
+        id: 9999,
+        x: 40,
+        y: -20,
+        color: '#FFD700',
+        size: 140,
+        speed: 0.12,
+        swingPhase: 0,
+        swingSpeed: 0.01,
+        swingAmplitude: 5,
+        isSpecial: true
+      };
+      setSpecialBalloon(sb);
+
+      // 2. Phát âm thanh (Sử dụng link âm thanh mẫu)
+      audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3');
+      audioRef.current.play().catch(() => console.log("Yêu cầu tương tác để phát nhạc"));
+
+      // 3. Hiện PiP sau đó 1.5 giây để kiểm tra tham chiếu xã hội
+      setTimeout(() => setShowPiP(true), 1500);
+
+    }, 3000);
+
+    return () => clearTimeout(specialEventTimer);
+  }, []);
+
+  // Effect ghi lại dữ liệu hành vi (Recording Loop)
   useEffect(() => {
     const recordLoop = setInterval(() => {
       const aiData = latestAIResult.current?.features;
-      // Target là quả bóng cao nhất (gần đỉnh nhất)
-      const nearestBalloon = balloonsRef.current.length > 0 ? 
-        balloonsRef.current.reduce((prev, current) => (prev.y > current.y) ? prev : current) : null;
       
-      const feature: BehavioralFeature = {
+      // Xác định mục tiêu quan trọng nhất lúc này
+      const currentSpecial = specialRef.current;
+      const nearestNormal = balloonsRef.current.length > 0 
+        ? balloonsRef.current.reduce((p, c) => (p.y > c.y ? p : c)) 
+        : null;
+      
+      const target = currentSpecial || nearestNormal;
+
+      // Logic check xem trẻ có đang nhìn vào vùng PiP không (Góc trên bên phải)
+      const isLookingAtSocial = showPiP && (aiData?.gazeX ?? 0) > 0.7 && (aiData?.gazeY ?? 1) < 0.4;
+
+      const feature: ExtendedFeature = {
         timestamp: Date.now(),
         gazeX: aiData?.gazeX ?? 0.5,
         gazeY: aiData?.gazeY ?? 0.5,
-        targetX: nearestBalloon ? nearestBalloon.x : 50,
-        targetY: nearestBalloon ? 100 - nearestBalloon.y : 50, // Đảo ngược tọa độ Y cho AI
-        targetSize: nearestBalloon ? nearestBalloon.size : 100,
-        audioStimulus: null,
-        isLookingAtTarget: false,
+        targetX: target ? target.x : 50,
+        targetY: target ? 100 - target.y : 50,
+        targetSize: target ? target.size : 100,
+        audioStimulus: currentSpecial ? "special_balloon_sound" : null,
+        isLookingAtTarget: false, // AI sẽ tính toán lại dựa trên tọa độ gaze và target
         attentionLevel: aiData?.avgAttention ?? 0.5,
         smileIntensity: aiData?.avgSmile ?? 0,
         frownIntensity: 0.1,
         affect: 'neutral',
         poseConfidence: aiData?.faceDetectionConfidence ?? 0,
-        faceConfidence: aiData?.faceDetectionConfidence ?? 0
+        faceConfidence: aiData?.faceDetectionConfidence ?? 0,
+        // Các trường mở rộng
+        isSpecialActive: !!currentSpecial,
+        isLookingAtSocial: isLookingAtSocial,
       };
+
       onFeatureCapture(feature);
     }, 100);
 
-    return () => { 
-      clearInterval(recordLoop); 
-    };
-  }, [onFeatureCapture, latestAIResult]);
+    return () => clearInterval(recordLoop);
+  }, [onFeatureCapture, latestAIResult, showPiP]);
 
-  const renderBalloon = (balloon: Balloon) => {
-    return (
-      <div
-        key={balloon.id}
-        className="balloon"
-        style={{
-          left: `${balloon.x}%`,
-          bottom: `${balloon.y}%`, // Sử dụng bottom
-          width: `${balloon.size}px`,
-          height: `${balloon.size * 1.2}px`,
-          '--balloon-color': balloon.color
-        } as React.CSSProperties}
-      >
-        <div className="balloon-body"></div>
+  const renderBalloon = (balloon: Balloon) => (
+    <div
+      key={balloon.id}
+      className={`balloon ${balloon.isSpecial ? 'special-balloon' : 'balloon-anim'}`}
+      style={{
+        left: `${balloon.x}%`,
+        bottom: `${balloon.y}%`,
+        width: `${balloon.size}px`,
+        height: `${balloon.size * 1.2}px`,
+        '--balloon-color': balloon.color
+      } as React.CSSProperties}
+    >
+      <div className="balloon-body">
+        {balloon.isSpecial && <div className="special-face">😊</div>}
       </div>
-    );
-  };
+    </div>
+  );
 
   return (
     <div className="balloon-game-container">
-      {/* Inject Style gốc */}
       <style>{styles}</style>
 
+      {/* Giao diện Header */}
       <div className="balloon-game-timer">
         ⏱️ {timeElapsed}s / {GAME_DURATION}s
       </div>
       
-      <div className="balloon-title">
+      <div className="balloon-title" style={{
+        position: 'absolute', top: '20px', left: '20px', color: 'white', 
+        fontSize: '32px', fontWeight: 'bold', textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+        background: 'rgba(0,0,0,0.4)', padding: '10px 20px', borderRadius: '15px', zIndex: 10
+      }}>
         🎈 Bong Bóng Bay
       </div>
-      
+
+      {/* Component PiP Giả lập */}
+      {showPiP && (
+        <div className="pip-container">
+          <img 
+            src="https://img.freepik.com/free-photo/mother-playing-with-her-baby_23-2148441334.jpg" 
+            alt="Parent Simulation"
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+          <div style={{
+            position: 'absolute', bottom: 0, width: '100%', 
+            background: 'rgba(0,0,0,0.6)', color: 'white', 
+            fontSize: '11px', textAlign: 'center', padding: '2px 0'
+          }}>
+            Người thân đang nhìn
+          </div>
+        </div>
+      )}
+
+      {/* Render các loại bóng */}
       {balloons.map(renderBalloon)}
+      {specialBalloon && renderBalloon(specialBalloon)}
       
       <div className="balloon-instruction">
-        Ngắm bóng bay bay lên trời! 👀🎈
+        {specialBalloon ? "Ô kìa! Một quả bóng thật to! 👀✨" : "Ngắm bóng bay bay lên trời! 👀🎈"}
       </div>
     </div>
   );

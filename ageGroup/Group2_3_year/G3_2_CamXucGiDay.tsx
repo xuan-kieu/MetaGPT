@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { SubGameProps, BehavioralFeature } from '../../types';
 
 const G3_2_EmotionMatch: React.FC<SubGameProps> = ({ 
@@ -6,94 +6,81 @@ const G3_2_EmotionMatch: React.FC<SubGameProps> = ({
   onFeatureCapture, 
   timeElapsed,
 }) => {
-  // --- CSS TỐI ƯU CHO TRẺ 2-3 TUỔI ---
+  // --- CSS TỐI ƯU ---
   const styles = `
     .emotion-container {
       width: 100%; height: 100%; position: relative;
       background: #F3E5F5; border-radius: 20px;
       display: flex; flex-direction: column; align-items: center;
-      justify-content: space-around; padding: 20px;
+      justify-content: space-around; padding: 20px; overflow: hidden;
     }
 
-    .emotion-title {
-      font-size: 32px; font-weight: bold; color: #7B1FA2;
-      background: white; padding: 10px 40px; border-radius: 50px;
-      box-shadow: 0 4px 0 #CE93D8;
+    .main-display-area {
+      position: relative; width: 300px; height: 300px;
+      display: flex; align-items: center; justify-content: center;
     }
 
     .main-emoji-display {
-      font-size: 150px; /* Siêu lớn cho bé */
-      margin: 20px 0;
+      font-size: 200px; 
       animation: bounce 2s infinite;
+      z-index: 2;
     }
 
-    .options-grid {
-      display: flex; gap: 40px; width: 100%; justify-content: center;
-    }
+    .options-grid { display: flex; gap: 30px; width: 100%; justify-content: center; }
 
     .emotion-card {
-      width: 220px; height: 220px; background: white;
-      border-radius: 40px; display: flex; flex-direction: column;
+      width: 180px; height: 180px; background: white;
+      border-radius: 35px; display: flex; flex-direction: column;
       align-items: center; justify-content: center; cursor: pointer;
-      box-shadow: 0 10px 0 #E0E0E0; border: 8px solid white;
+      box-shadow: 0 8px 0 #E0E0E0; border: 6px solid white;
       transition: all 0.2s;
     }
 
-    .emotion-card.selected-correct {
-      background: #C8E6C9; border-color: #4CAF50;
-      transform: scale(1.1);
-    }
+    .emotion-card.selected-correct { background: #C8E6C9; border-color: #4CAF50; transform: scale(1.1); }
+    .emotion-card.selected-wrong { background: #FFCDD2; border-color: #F44336; animation: shake 0.5s; }
 
-    .emotion-card.selected-wrong {
-      background: #FFCDD2; border-color: #F44336;
-      animation: shake 0.5s;
-    }
+    .card-emoji { font-size: 70px; }
+    .card-label { font-size: 24px; font-weight: bold; color: #333; margin-top: 8px; }
 
-    .card-emoji { font-size: 80px; }
-    .card-label { font-size: 28px; font-weight: bold; color: #333; margin-top: 10px; }
-
-    .timer-line {
-      position: absolute; top: 0; left: 0; height: 10px;
-      background: #BA68C8; width: ${(timeElapsed / 180) * 100}%;
-      transition: width 1s linear;
-    }
-
-    @keyframes bounce {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.1); }
-    }
-
-    @keyframes shake {
-      0%, 100% { transform: translateX(0); }
-      25% { transform: translateX(-15px); }
-      75% { transform: translateX(15px); }
-    }
+    @keyframes bounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+    @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
   `;
 
-  // --- DỮ LIỆU CẢM XÚC ĐƠN GIẢN ---
-  const emotionPool = [
-    { id: 1, emoji: '😊', name: 'Vui', type: 'positive' },
-    { id: 2, emoji: '😢', name: 'Buồn', type: 'negative' },
-    { id: 3, emoji: '😡', name: 'Giận', type: 'negative' },
-    { id: 4, emoji: '😲', name: 'Ồ!', type: 'surprised' },
-    { id: 5, emoji: '😴', name: 'Ngủ', type: 'neutral' },
-  ];
+  // --- 3 CẢM XÚC CHÍNH ---
+  const emotionPool = useMemo(() => [
+    { id: 1, emoji: '😊', name: 'Vui', type: 'positive', call: 'Bạn ấy đang vui này!' },
+    { id: 2, emoji: '😢', name: 'Buồn', type: 'negative', call: 'Bạn ấy đang buồn quá!' },
+    { id: 3, emoji: '😡', name: 'Giận', type: 'negative', call: 'Bạn ấy đang giận dữ kìa!' },
+  ], []);
 
   const [currentQuestion, setCurrentQuestion] = useState(emotionPool[0]);
   const [options, setOptions] = useState<typeof emotionPool>([]);
   const [status, setStatus] = useState<'idle' | 'correct' | 'wrong'>('idle');
-  const [feedback, setFeedback] = useState('Bạn này đang làm sao nhỉ?');
+  const [clickedId, setClickedId] = useState<number | null>(null); // Dùng để xác định card nào bị bấm sai
+
+  const speak = useCallback((text: string) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const msg = new SpeechSynthesisUtterance(text);
+      msg.lang = 'vi-VN';
+      msg.rate = 0.85;
+      window.speechSynthesis.speak(msg);
+    }
+  }, []);
 
   const generateNewQuestion = useCallback(() => {
     const correct = emotionPool[Math.floor(Math.random() * emotionPool.length)];
-    const others = emotionPool.filter(e => e.id !== correct.id);
-    const wrong = others[Math.floor(Math.random() * others.length)];
+    const shuffled = [...emotionPool].sort(() => Math.random() - 0.5);
     
     setCurrentQuestion(correct);
-    setOptions([correct, wrong].sort(() => Math.random() - 0.5));
+    setOptions(shuffled);
     setStatus('idle');
-    setFeedback('Bạn này đang làm sao nhỉ?');
-  }, []);
+    setClickedId(null);
+    
+    setTimeout(() => {
+      speak(`${correct.call}. Con chọn hình giống bạn đi!`);
+    }, 500);
+  }, [emotionPool, speak]);
 
   useEffect(() => {
     generateNewQuestion();
@@ -101,37 +88,44 @@ const G3_2_EmotionMatch: React.FC<SubGameProps> = ({
 
   const handleSelect = (id: number) => {
     if (status !== 'idle') return;
+    setClickedId(id);
 
     if (id === currentQuestion.id) {
       setStatus('correct');
-      setFeedback('Đúng rồi! Bé giỏi quá! 🎉');
-      setTimeout(generateNewQuestion, 1500);
+      speak("Đúng rồi! Bé giỏi quá!");
+      setTimeout(generateNewQuestion, 2000);
     } else {
       setStatus('wrong');
-      setFeedback('Bé nhìn kỹ lại bạn nhé! ❤️');
-      setTimeout(() => setStatus('idle'), 1000);
+      speak("Bé nhìn kỹ lại nhé!");
+      setTimeout(() => {
+        setStatus('idle');
+        setClickedId(null);
+      }, 1000);
     }
   };
 
-  // --- AI TRACKING ---
+  // --- AI TRACKING (Phân tích vùng nhìn Mắt/Miệng) ---
   useEffect(() => {
     const recordLoop = setInterval(() => {
       const aiData = latestAIResult.current?.features;
-      const feature: BehavioralFeature = {
+      const gx = aiData?.gazeX ?? 0.5;
+      const gy = aiData?.gazeY ?? 0.5;
+
+      // Tính toán vùng chi tiết (Giả định vùng emoji ở giữa màn hình)
+      const isLookingAtEyes = (gx > 0.4 && gx < 0.6) && (gy > 0.25 && gy < 0.35);
+      const isLookingAtMouth = (gx > 0.4 && gx < 0.6) && (gy > 0.45 && gy < 0.55);
+
+      onFeatureCapture({
         timestamp: Date.now(),
-        gazeX: aiData?.gazeX ?? 0.5,
-        gazeY: aiData?.gazeY ?? 0.5,
-        targetX: 50, targetY: 45, targetSize: 200,
-        audioStimulus: null,
+        gazeX: gx, gazeY: gy,
+        targetX: 50, targetY: 40,
+        audioStimulus: currentQuestion.name,
         isLookingAtTarget: true,
+        focusZone: isLookingAtEyes ? 'EYES' : (isLookingAtMouth ? 'MOUTH' : 'FACE'),
         attentionLevel: aiData?.avgAttention ?? 0.5,
-        smileIntensity: aiData?.avgSmile ?? 0,
-        frownIntensity: 0,
         affect: currentQuestion.type as any,
         poseConfidence: aiData?.faceDetectionConfidence ?? 0,
-        faceConfidence: aiData?.faceDetectionConfidence ?? 0
-      };
-      onFeatureCapture(feature);
+      } as any);
     }, 200);
     return () => clearInterval(recordLoop);
   }, [currentQuestion, onFeatureCapture, latestAIResult]);
@@ -139,16 +133,13 @@ const G3_2_EmotionMatch: React.FC<SubGameProps> = ({
   return (
     <div className="emotion-container">
       <style>{styles}</style>
-      <div className="timer-line" />
       
-      <div className="emotion-title">Cảm Xúc Của Bạn</div>
-
-      <div className="main-emoji-display">
-        {currentQuestion.emoji}
+      <div style={{fontSize: '32px', fontWeight: 'bold', color: '#7B1FA2'}}>
+        Cảm Xúc Của Bạn
       </div>
 
-      <div className="feedback-text" style={{fontSize: '24px', fontWeight: 'bold', color: '#4A5568'}}>
-        {feedback}
+      <div className="main-display-area">
+        <div className="main-emoji-display">{currentQuestion.emoji}</div>
       </div>
 
       <div className="options-grid">
@@ -157,7 +148,7 @@ const G3_2_EmotionMatch: React.FC<SubGameProps> = ({
             key={opt.id}
             className={`emotion-card 
               ${status === 'correct' && opt.id === currentQuestion.id ? 'selected-correct' : ''}
-              ${status === 'wrong' && opt.id !== currentQuestion.id ? 'selected-wrong' : ''}
+              ${status === 'wrong' && opt.id === clickedId ? 'selected-wrong' : ''} 
             `}
             onClick={() => handleSelect(opt.id)}
           >

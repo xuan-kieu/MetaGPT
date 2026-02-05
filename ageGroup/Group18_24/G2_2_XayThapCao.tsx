@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { SubGameProps, BehavioralFeature } from '../../types';
 
 const G2_2_XayThapCao: React.FC<SubGameProps> = ({ 
@@ -6,92 +6,71 @@ const G2_2_XayThapCao: React.FC<SubGameProps> = ({
   onFeatureCapture, 
   timeElapsed,
 }) => {
-  // --- CSS TỐI GIẢN & SINH ĐỘNG ---
+  // --- KHAI BÁO BIẾN CỐ ĐỊNH ---
+  const GAME_DURATION = 180; // Thêm dòng này để fix lỗi "Cannot find name"
+
+  // --- CSS NÂNG CẤP ---
   const styles = `
     .xaythap-container {
       width: 100%; height: 100%; position: relative;
       background: linear-gradient(180deg, #E3F2FD 0%, #FFF9C4 100%);
-      border-radius: 20px; overflow: hidden;
-      display: flex; flex-direction: column; align-items: center;
+      border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; align-items: center;
     }
-
     .xaythap-timer {
       position: absolute; top: 20px; right: 20px;
-      background: rgba(0, 0, 0, 0.5); color: white;
-      padding: 8px 15px; border-radius: 20px; font-size: 18px; z-index: 10;
+      background: rgba(0, 0, 0, 0.5); color: white; padding: 8px 15px; border-radius: 20px; font-size: 18px; z-index: 10;
     }
-
+    .xaythap-mascot {
+      position: absolute; left: 50px; top: 100px; font-size: 80px; transition: all 0.5s ease-in-out;
+      z-index: 5;
+    }
     .xaythap-stage {
       flex: 1; width: 100%; position: relative;
-      display: flex; flex-direction: column-reverse; align-items: center;
-      padding-bottom: 20px;
+      display: flex; flex-direction: column-reverse; align-items: center; padding-bottom: 20px;
+      margin-bottom: 10px;
     }
-
     .xaythap-block {
-      width: 220px; height: 50px;
-      border-radius: 12px;
-      margin-bottom: 4px;
+      width: 220px; height: 50px; border-radius: 12px; margin-bottom: 4px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 30px; color: white;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-      animation: blockAppear 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      font-size: 24px; color: white; box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      transition: all 0.3s;
     }
-
-    @keyframes blockAppear {
-      0% { transform: translateY(-100px) scale(0.5); opacity: 0; }
-      100% { transform: translateY(0) scale(1); opacity: 1; }
-    }
-
     .xaythap-ground {
-      width: 300px; height: 20px; background: #8B4513; border-radius: 10px;
+      width: 320px; height: 30px; background: #8B4513; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;
     }
-
     .xaythap-panel {
-      width: 100%; height: 160px; background: white;
-      display: flex; justify-content: center; align-items: center; gap: 30px;
-      border-top: 5px solid #FF9800; padding: 10px;
+      width: 100%; height: 180px; background: rgba(255,255,255,0.9);
+      display: flex; justify-content: center; align-items: center; gap: 20px; 
+      padding: 10px; border-top: 4px solid #FFCC80;
     }
-
     .xaythap-item {
-      width: 90px; height: 90px; border-radius: 20px;
+      width: 80px; height: 80px; border-radius: 15px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 50px; cursor: pointer;
-      box-shadow: 0 8px 15px rgba(0,0,0,0.1);
-      transition: transform 0.2s;
+      font-size: 40px; cursor: grab; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
     }
-
-    .xaythap-item:active { transform: scale(0.9); }
-
     .xaythap-instruction {
-      position: absolute; top: 80px; font-size: 36px;
-      font-weight: bold; color: #FF5722; text-align: center;
-      width: 100%; pointer-events: none;
+      position: absolute; top: 40px; font-size: 28px; font-weight: bold; color: #FF5722;
+      background: white; padding: 10px 30px; border-radius: 40px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      z-index: 10;
     }
-
-    .xaythap-star {
-      position: absolute; font-size: 40px;
-      animation: starFly 1s forwards;
-    }
-
-    @keyframes starFly {
-      0% { transform: scale(0); opacity: 1; }
-      100% { transform: translateY(-100px) scale(2); opacity: 0; }
-    }
+    .drop-zone-active { background: rgba(76, 175, 80, 0.15); border: 4px dashed #4CAF50; border-radius: 20px; }
   `;
 
-  // --- LOGIC ---
-  const GAME_DURATION = 180;
+  // --- STATE ---
+  const [gameState, setGameState] = useState<'MODELING' | 'PLAYING'>('MODELING');
   const [tower, setTower] = useState<any[]>([]);
-  const [celebrate, setCelebrate] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [mascotPos, setMascotPos] = useState({ x: 50, y: 100 });
 
   const blockOptions = useMemo(() => [
-    { name: "Khối đỏ", emoji: "🟥", color: "#F44336" },
-    { name: "Khối xanh", emoji: "🟦", color: "#2196F3" },
-    { name: "Khối vàng", emoji: "🟨", color: "#FFEB3B" },
-    { name: "Khối lá", emoji: "🟩", color: "#4CAF50" }
+    { type: 'RED', emoji: "🟥", color: "#F44336", name: "Khối đỏ" },
+    { type: 'BLUE', emoji: "🟦", color: "#2196F3", name: "Khối xanh" },
+    { type: 'YELLOW', emoji: "🟨", color: "#FFEB3B", name: "Khối vàng" },
+    { type: 'GREEN', emoji: "🟩", color: "#4CAF50", name: "Khối lá" }
   ], []);
 
-  const speak = (text: string) => {
+  const speak = useCallback((text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const msg = new SpeechSynthesisUtterance(text);
@@ -99,45 +78,82 @@ const G2_2_XayThapCao: React.FC<SubGameProps> = ({
       msg.rate = 0.9;
       window.speechSynthesis.speak(msg);
     }
-  };
+  }, []);
 
-  const addBlock = (option: any) => {
-    if (tower.length >= 7) {
-      // Nếu tháp quá cao, tự động "thu nhỏ" để bé xây tiếp
-      setTower([]);
-      speak("Ồ! Xây lại tháp mới nào");
-      return;
+  // --- LOGIC GIAI ĐOẠN LÀM MẪU ---
+  useEffect(() => {
+    let active = true;
+    if (gameState === 'MODELING') {
+      const runDemo = async () => {
+        if (!active) return;
+        speak("Bạn Gấu xem này, tớ xây tháp nhé!");
+        await new Promise(r => setTimeout(r, 2500));
+
+        for (let i = 0; i < 3; i++) {
+          if (!active) break;
+          const opt = blockOptions[i];
+          setMascotPos({ x: 200, y: 150 }); // Di chuyển gấu lại gần tháp
+          speak(opt.name);
+          setTower(prev => [...prev, { ...opt, id: `demo-${i}` }]);
+          await new Promise(r => setTimeout(r, 1800));
+        }
+
+        if (active) {
+          speak("Đến lượt con đấy! Con xây tháp giống tớ nhé.");
+          setTimeout(() => {
+            setTower([]); 
+            setGameState('PLAYING');
+            setMascotPos({ x: 50, y: 100 });
+          }, 1500);
+        }
+      };
+      runDemo();
     }
+    return () => { active = false; };
+  }, [gameState, blockOptions, speak]);
 
-    speak(option.name);
-    setTower(prev => [...prev, { ...option, id: Date.now() }]);
-    setCelebrate(true);
-    setTimeout(() => setCelebrate(false), 1000);
+  // --- DRAG & DROP ---
+  const onDragStart = (e: React.DragEvent, opt: any) => {
+    if (gameState !== 'PLAYING') return;
+    e.dataTransfer.setData("blockType", opt.type);
+    setIsDragging(true);
   };
 
-  // AI Tracking
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (gameState !== 'PLAYING') return;
+
+    const type = e.dataTransfer.getData("blockType");
+    const option = blockOptions.find(o => o.type === type);
+    
+    if (option) {
+      setTower(prev => [...prev, { ...option, id: Date.now() }]);
+      speak(option.name);
+    }
+  };
+
+  // --- AI TRACKING ---
   useEffect(() => {
     const recordLoop = setInterval(() => {
       const aiData = latestAIResult.current?.features;
+      const gx = aiData?.gazeX ?? 0.5;
+      const gy = aiData?.gazeY ?? 0.5;
+
       onFeatureCapture({
         timestamp: Date.now(),
-        gazeX: aiData?.gazeX ?? 0.5,
-        gazeY: aiData?.gazeY ?? 0.5,
-        targetX: 50,
-        targetY: 70, // Tập trung vào khu vực xây tháp
-        targetSize: 200,
-        audioStimulus: tower.length > 0 ? tower[tower.length - 1].name : null,
-        isLookingAtTarget: false,
-        attentionLevel: aiData?.avgAttention ?? 0.5,
-        smileIntensity: aiData?.avgSmile ?? 0,
-        frownIntensity: 0,
-        affect: celebrate ? 'positive' : 'neutral',
-        poseConfidence: aiData?.faceDetectionConfidence ?? 0,
-        faceConfidence: aiData?.faceDetectionConfidence ?? 0
-      });
+        gazeX: gx, gazeY: gy,
+        targetX: 50, targetY: 50,
+        gameState: gameState,
+        isLookingAtMascot: gx < 0.3 && gy < 0.4,
+        isLookingAtTower: gx > 0.3 && gx < 0.7,
+        handDetected: aiData?.handDetected ?? false,
+        dragActive: isDragging,
+        towerHeight: tower.length
+      } as any);
     }, 100);
     return () => clearInterval(recordLoop);
-  }, [onFeatureCapture, latestAIResult, tower, celebrate]);
+  }, [onFeatureCapture, latestAIResult, tower, gameState, isDragging]);
 
   return (
     <div className="xaythap-container">
@@ -146,24 +162,34 @@ const G2_2_XayThapCao: React.FC<SubGameProps> = ({
       <div className="xaythap-timer">⏱️ {timeElapsed}s / {GAME_DURATION}s</div>
 
       <div className="xaythap-instruction">
-        {tower.length === 0 ? "Bé xây tháp nhé!" : "Tháp cao quá!"}
+        {gameState === 'MODELING' ? "Nhìn tớ làm mẫu nhé!" : "Con hãy kéo khối vào tháp!"}
       </div>
 
-      <div className="xaythap-stage">
-        <div className="xaythap-ground"></div>
+      <div 
+        className="xaythap-mascot"
+        style={{ left: mascotPos.x, top: mascotPos.y }}
+      >
+        {gameState === 'MODELING' ? "🐻" : "🐨"}
+      </div>
+
+      <div 
+        className={`xaythap-stage ${isDragging ? 'drop-zone-active' : ''}`}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={onDrop}
+      >
+        <div className="xaythap-ground">NỀN THÁP</div>
         {tower.map((block, idx) => (
           <div 
             key={block.id} 
             className="xaythap-block"
             style={{ 
               backgroundColor: block.color,
-              width: `${240 - (idx * 15)}px` // Tháp nhỏ dần lên trên
+              width: `${240 - (idx * 15)}px`,
             }}
           >
             {block.emoji}
           </div>
         ))}
-        {celebrate && <div className="xaythap-star" style={{ bottom: tower.length * 55 }}>⭐</div>}
       </div>
 
       <div className="xaythap-panel">
@@ -171,8 +197,14 @@ const G2_2_XayThapCao: React.FC<SubGameProps> = ({
           <div 
             key={idx} 
             className="xaythap-item"
-            style={{ backgroundColor: opt.color }}
-            onClick={() => addBlock(opt)}
+            style={{ 
+              backgroundColor: opt.color,
+              opacity: gameState === 'MODELING' ? 0.4 : 1,
+              cursor: gameState === 'MODELING' ? 'default' : 'grab'
+            }}
+            draggable={gameState === 'PLAYING'}
+            onDragStart={(e) => onDragStart(e, opt)}
+            onDragEnd={() => setIsDragging(false)}
           >
             {opt.emoji}
           </div>

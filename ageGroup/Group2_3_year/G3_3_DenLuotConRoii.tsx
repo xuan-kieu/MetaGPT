@@ -1,156 +1,182 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { SubGameProps, BehavioralFeature } from '../../types';
 
-const G3_3_WhoseTurn: React.FC<SubGameProps> = ({ 
+const G3_3_TurnTaking: React.FC<SubGameProps> = ({ 
   latestAIResult, 
   onFeatureCapture, 
   timeElapsed,
 }) => {
-  // --- KHO 12 NHÂN VẬT ---
-  const characterLibrary = useMemo(() => [
-    { id: 1, emoji: '👧', name: 'Bé Lan' }, { id: 2, emoji: '👦', name: 'Bé Bi' },
-    { id: 3, emoji: '🐻', name: 'Gấu Pooh' }, { id: 4, emoji: '🐶', name: 'Cún con' },
-    { id: 5, emoji: '🐱', name: 'Mèo Mi' }, { id: 6, emoji: '🐰', name: 'Thỏ Trắng' },
-    { id: 7, emoji: '🦁', name: 'Sư tử nhỏ' }, { id: 8, emoji: '🐘', name: 'Voi con' },
-    { id: 9, emoji: '🐵', name: 'Khỉ con' }, { id: 10, emoji: '🐷', name: 'Heo hồng' },
-    { id: 11, emoji: '🐸', name: 'Ếch cốm' }, { id: 12, emoji: '🐯', name: 'Hổ con' },
-  ], []);
+  // --- STATE QUẢN LÝ LƯỢT ---
+  const [turn, setTurn] = useState<'AI' | 'CHILD'>('AI');
+  const [status, setStatus] = useState<'IDLE' | 'ACTING' | 'WAITING'>('IDLE');
+  const [timeLeft, setTimeLeft] = useState(5); // 5 giây cho lượt của trẻ
+  const [feedback, setFeedback] = useState('Chờ đến lượt mình nhé!');
+  const [score, setScore] = useState({ success: 0, miss: 0, wrongTurn: 0 });
 
-  const [currentRoundChars, setCurrentRoundChars] = useState<typeof characterLibrary>([]);
-  const [nextTurnId, setNextTurnId] = useState<number | null>(null); // ID của bạn được chọn ngẫu nhiên
-  const [actingId, setActingId] = useState<number | null>(null);
-  const [feedback, setFeedback] = useState('');
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number>(Date.now());
 
-  // Hàm chọn 3 bạn ngẫu nhiên và chọn 1 bạn bắt đầu
-  const startNewRound = useCallback(() => {
-    const shuffled = [...characterLibrary].sort(() => Math.random() - 0.5);
-    const selected = shuffled.slice(0, 3);
-    setCurrentRoundChars(selected);
+  const speak = useCallback((text: string) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const msg = new SpeechSynthesisUtterance(text);
+      msg.lang = 'vi-VN';
+      msg.rate = 0.9;
+      window.speechSynthesis.speak(msg);
+    }
+  }, []);
+
+  // --- LOGIC ĐIỀU PHỐI LƯỢT ---
+  const startChildTurn = useCallback(() => {
+    setTurn('CHILD');
+    setStatus('WAITING');
+    setTimeLeft(5);
+    setFeedback('Đến lượt con đấy! Chạm vào bạn Gấu đi!');
+    speak("Đến lượt con rồi!");
+    startTimeRef.current = Date.now();
+  }, [speak]);
+
+  const startAITurn = useCallback(() => {
+    setTurn('AI');
+    setStatus('IDLE');
+    setFeedback('Đang chờ bạn Gấu chơi...');
     
-    // Chọn ngẫu nhiên 1 trong 3 bạn để bắt đầu
-    const randomFirst = selected[Math.floor(Math.random() * 3)];
-    setNextTurnId(randomFirst.id);
-    setFeedback(`Ơ kìa, đến lượt ${randomFirst.name} đấy!`);
-    setActingId(null);
-  }, [characterLibrary]);
-
-  useEffect(() => {
-    startNewRound();
-  }, [startNewRound]);
-
-  const handleCharClick = (id: number, name: string) => {
-    // Chỉ hoạt động nếu bấm đúng bạn đang có tín hiệu
-    if (id !== nextTurnId || actingId !== null) return;
-
-    setActingId(id);
-    setFeedback(`${name} nhảy lên cao quá! ✨`);
-
-    // Sau khi nhảy xong, chọn ngẫu nhiên bạn TIẾP THEO
+    // Giả lập AI suy nghĩ rồi hành động
     setTimeout(() => {
-      setActingId(null);
-      // Lọc ra danh sách 2 bạn còn lại để không trùng với bạn vừa nhảy
-      const otherChars = currentRoundChars.filter(c => c.id !== id);
-      const randomNext = otherChars[Math.floor(Math.random() * otherChars.length)];
+      setStatus('ACTING');
+      setFeedback('Bạn Gấu đập nè! Hây da!');
+      speak("Tớ đập này!");
       
-      setNextTurnId(randomNext.id);
-      setFeedback(`Giỏi quá! Giờ đến lượt ${randomNext.name} nhé!`);
-    }, 1200);
+      setTimeout(() => {
+        setStatus('IDLE');
+        startChildTurn();
+      }, 1500);
+    }, 2000);
+  }, [speak, startChildTurn]);
+
+  // Khởi tạo trò chơi
+  useEffect(() => {
+    startAITurn();
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      window.speechSynthesis.cancel();
+    };
+  }, []);
+
+  // Đếm ngược lượt của trẻ
+  useEffect(() => {
+    if (turn === 'CHILD' && timeLeft > 0 && status === 'WAITING') {
+      timerRef.current = setInterval(() => {
+        setTimeLeft(prev => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current!);
+            setScore(s => ({ ...s, miss: s.miss + 1 }));
+            startAITurn();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [turn, timeLeft, status, startAITurn]);
+
+  const handleInteract = () => {
+    if (turn === 'CHILD') {
+      const reactionTime = (Date.now() - startTimeRef.current) / 1000;
+      setStatus('ACTING');
+      setFeedback(`Giỏi quá! Con làm được rồi! (${reactionTime}s)`);
+      setScore(s => ({ ...s, success: s.success + 1 }));
+      
+      if (timerRef.current) clearInterval(timerRef.current);
+      
+      setTimeout(() => {
+        startAITurn();
+      }, 1500);
+    } else {
+      // Trẻ đập sai lượt (Impulsive behavior)
+      setFeedback('Chưa đến lượt con đâu, chờ một chút nhé!');
+      setScore(s => ({ ...s, wrongTurn: s.wrongTurn + 1 }));
+      speak("Chờ tớ một tí!");
+    }
   };
+
+  // --- AI TRACKING ---
+  useEffect(() => {
+    const recordLoop = setInterval(() => {
+      const aiData = latestAIResult.current?.features;
+      const gx = aiData?.gazeX ?? 0.5;
+      const gy = aiData?.gazeY ?? 0.5;
+
+      onFeatureCapture({
+        timestamp: Date.now(),
+        gazeX: gx, gazeY: gy,
+        isLookingAtTarget: gx > 0.3 && gx < 0.7 && gy > 0.3 && gy < 0.7,
+        currentTurn: turn,
+        turnStatus: status,
+        reactionTime: turn === 'CHILD' ? (Date.now() - startTimeRef.current) / 1000 : null,
+        impulsiveClicks: score.wrongTurn,
+        attentionLevel: aiData?.avgAttention ?? 0.5,
+      } as any);
+    }, 200);
+    return () => clearInterval(recordLoop);
+  }, [onFeatureCapture, latestAIResult, turn, status, score]);
 
   // --- STYLES ---
   const styles = `
-    .turn-container {
+    .game-container {
       width: 100%; height: 100%; position: relative;
-      background: #E8F5E9; border-radius: 20px;
-      display: flex; flex-direction: column; align-items: center; padding: 20px;
+      background: #FFF9C4; display: flex; flex-direction: column; align-items: center; justify-content: center;
     }
-    .timer {
-      position: absolute; top: 15px; left: 20px;
-      background: #2E7D32; color: white; padding: 5px 15px;
-      border-radius: 20px; font-weight: bold;
+    .status-banner {
+      position: absolute; top: 40px; font-size: 32px; font-weight: bold;
+      color: ${turn === 'CHILD' ? '#E64A19' : '#1976D2'};
+      background: white; padding: 10px 40px; border-radius: 40px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     }
-    .title {
-      font-size: 28px; font-weight: bold; color: #1B5E20;
-      background: white; padding: 10px 40px; border-radius: 50px;
-      margin-bottom: 20px; box-shadow: 0 4px 0 #C8E6C9;
-    }
-    .stage {
-      flex: 1; display: flex; gap: 40px; justify-content: center; align-items: center;
-    }
-    .char-card {
-      width: 160px; height: 160px; background: white; border-radius: 50%;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      border: 8px solid white; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    .mascot-container {
+      width: 300px; height: 300px; border-radius: 50%;
+      background: white; border: 15px solid ${turn === 'CHILD' ? '#FFEB3B' : '#BBDEFB'};
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
       cursor: pointer; position: relative;
     }
-    .char-card.glow {
-      border-color: #FFD600; transform: scale(1.1);
-      box-shadow: 0 0 30px #FFD600;
+    .mascot-acting { transform: scale(1.2); border-color: #4CAF50; box-shadow: 0 0 40px #4CAF50; }
+    .mascot-emoji { font-size: 180px; }
+    
+    .countdown-circle {
+      position: absolute; top: -20px; right: -20px;
+      width: 80px; height: 80px; border-radius: 50%;
+      background: #F44336; color: white;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px; font-weight: bold; border: 5px solid white;
     }
-    .char-card.jump {
-      transform: translateY(-70px) scale(1.2);
-      border-color: #4CAF50;
-    }
-    .emoji { font-size: 90px; }
-    .name-tag {
-      position: absolute; bottom: -45px; font-size: 22px;
-      font-weight: bold; color: #2E7D32;
-    }
-    .arrow {
-      position: absolute; top: -60px; font-size: 50px;
-      animation: bounce-arrow 0.8s infinite;
-    }
-    .bubble {
-      background: white; padding: 20px 50px; border-radius: 40px;
-      font-size: 24px; font-weight: bold; color: #333;
-      box-shadow: 0 6px 0 #BDBDBD; margin-top: 20px;
-    }
-    @keyframes bounce-arrow {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(15px); }
+    .feedback-bubble {
+      margin-top: 40px; font-size: 28px; font-weight: bold; color: #5D4037;
+      max-width: 80%; text-align: center;
     }
   `;
 
   return (
-    <div className="turn-container">
+    <div className="game-container">
       <style>{styles}</style>
       
-      <div className="timer">⏳ {Math.max(0, 180 - timeElapsed)}s</div>
-      <div className="title">🔄 Nhấn Vào Bạn Có Mũi Tên</div>
-
-      <div className="stage">
-        {currentRoundChars.map((char) => (
-          <div
-            key={char.id}
-            className={`char-card 
-              ${nextTurnId === char.id && actingId === null ? 'glow' : ''} 
-              ${actingId === char.id ? 'jump' : ''}
-            `}
-            onClick={() => handleCharClick(char.id, char.name)}
-          >
-            {nextTurnId === char.id && actingId === null && (
-              <div className="arrow">👇</div>
-            )}
-            <span className="emoji">{char.emoji}</span>
-            <div className="name-tag">{char.name}</div>
-          </div>
-        ))}
+      <div className="status-banner">
+        {turn === 'AI' ? '🤖 Lượt bạn Gấu' : '👶 Lượt của con'}
       </div>
 
-      <div className="bubble">{feedback}</div>
-      
-      <button 
-        onClick={startNewRound}
-        style={{
-          marginTop: '20px', padding: '10px 25px', borderRadius: '30px', 
-          border: 'none', background: '#FF8A65', color: 'white', 
-          fontWeight: 'bold', cursor: 'pointer', fontSize: '18px'
-        }}
+      <div 
+        className={`mascot-container ${status === 'ACTING' ? 'mascot-acting' : ''}`}
+        onClick={handleInteract}
       >
-        Đổi bạn mới 🔀
-      </button>
+        <span className="mascot-emoji">{turn === 'AI' && status === 'ACTING' ? '💥' : '🐻'}</span>
+        {turn === 'CHILD' && status === 'WAITING' && (
+          <div className="countdown-circle">{timeLeft}</div>
+        )}
+      </div>
+
+      <div className="feedback-bubble">{feedback}</div>
     </div>
   );
 };
 
-export default G3_3_WhoseTurn;
+export default G3_3_TurnTaking;

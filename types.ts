@@ -161,3 +161,45 @@ export interface ChildProfile {
     months: number;
   };
 }
+
+export interface ReportDomainAnalysis {
+  domain: string;
+  score: number;
+  percentile: number;
+  age_equivalent: string;
+  indicators: {
+    skill: string;
+    status: 'RED' | 'ORANGE' | 'GREEN';
+    details: string;
+  }[];
+}
+
+// Cấu trúc báo cáo hoàn chỉnh (JSON Output)
+export interface ClinicalReport {
+  report_id: string;
+  child_info: {
+    name: string;
+    age_months: number;
+    assessment_date: string;
+    gender?: string;
+  };
+  executive_summary: {
+    overall_risk: string;
+    key_strengths: string[];
+    key_concerns: string[];
+    developmental_discrepancy: string;
+  };
+  domain_analysis: ReportDomainAnalysis[];
+  behavioral_patterns: {
+    attention_pattern: string;
+    social_engagement: string;
+    sensory_profile: string;
+    gaze_stability_note?: string; // Thêm dựa trên features của bạn
+  };
+  recommendations: {
+    priority: 'HIGH' | 'MEDIUM' | 'LOW';
+    actions: string[];
+    resources: Array<{ type: string; name: string; contact?: string }>;
+  };
+  disclaimer: string;
+}

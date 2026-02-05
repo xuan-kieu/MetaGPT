@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { SubGameProps, BehavioralFeature } from '../../types';
 
 const G3_4_PairMatch: React.FC<SubGameProps> = ({ 
@@ -6,7 +6,7 @@ const G3_4_PairMatch: React.FC<SubGameProps> = ({
   onFeatureCapture, 
   timeElapsed,
 }) => {
-  // --- KHO DỮ LIỆU HÌNH ẢNH PHONG PHÚ ---
+  // --- KHO DỮ LIỆU ---
   const emojiLibrary = useMemo(() => [
     { emoji: '🍎', name: 'Táo' }, { emoji: '🐱', name: 'Mèo' },
     { emoji: '🚗', name: 'Ô tô' }, { emoji: '🧸', name: 'Gấu' },
@@ -15,7 +15,7 @@ const G3_4_PairMatch: React.FC<SubGameProps> = ({
     { emoji: '🍓', name: 'Dâu' }, { emoji: '🐸', name: 'Ếch' }
   ], []);
 
-  const GAME_DURATION = 180; // 3 phút
+  const GAME_DURATION = 180;
 
   interface Card {
     id: number;
@@ -25,21 +25,25 @@ const G3_4_PairMatch: React.FC<SubGameProps> = ({
     matched: boolean;
   }
 
+  // --- STATE ---
   const [cards, setCards] = useState<Card[]>([]);
   const [flippedCards, setFlippedCards] = useState<number[]>([]);
   const [isChecking, setIsChecking] = useState(false);
   const [round, setRound] = useState(1);
+  const [stats, setStats] = useState({ flips: 0, mistakes: 0, memoryHits: 0 });
 
-  // --- LOGIC TẠO VÒNG CHƠI MỚI ---
+  // Theo dõi bộ nhớ vị trí của trẻ
+  const seenCards = useRef<Set<number>>(new Set());
+
+  // --- LOGIC GAME ---
   const initGame = useCallback(() => {
-    // Chọn ngẫu nhiên 3 cặp từ thư viện (tổng 6 ô) để vừa sức trẻ 2-3 tuổi
+    // Tăng lên 4 cặp (8 thẻ) cho trẻ 2.5 - 3 tuổi
     const selectedEmojis = [...emojiLibrary]
       .sort(() => Math.random() - 0.5)
-      .slice(0, 3);
+      .slice(0, 4);
 
     const newCards: Card[] = [];
     selectedEmojis.forEach((item, index) => {
-      // Mỗi hình tạo 2 bản sao
       for (let i = 0; i < 2; i++) {
         newCards.push({
           id: Math.random(),
@@ -54,26 +58,35 @@ const G3_4_PairMatch: React.FC<SubGameProps> = ({
     setCards(newCards.sort(() => Math.random() - 0.5));
     setFlippedCards([]);
     setIsChecking(false);
+    seenCards.current.clear();
   }, [emojiLibrary]);
 
   useEffect(() => {
     initGame();
   }, [initGame, round]);
 
-  // Kiểm tra hoàn thành vòng chơi
-  useEffect(() => {
-    if (cards.length > 0 && cards.every(c => c.matched)) {
-      const timer = setTimeout(() => {
-        setRound(prev => prev + 1);
-      }, 1500); // Đợi 1.5s để bé thấy kết quả rồi sang vòng mới
-      return () => clearTimeout(timer);
+  const speak = (text: string) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const msg = new SpeechSynthesisUtterance(text);
+      msg.lang = 'vi-VN';
+      msg.rate = 0.9;
+      window.speechSynthesis.speak(msg);
     }
-  }, [cards]);
+  };
 
   const handleCardClick = (id: number) => {
     if (isChecking || flippedCards.length >= 2) return;
     const card = cards.find(c => c.id === id);
     if (!card || card.flipped || card.matched) return;
+
+    setStats(s => ({ ...s, flips: s.flips + 1 }));
+    
+    // Ghi nhớ vị trí: Nếu thẻ này đã từng được lật trước đó
+    if (seenCards.current.has(id)) {
+      setStats(s => ({ ...s, memoryHits: s.memoryHits + 1 }));
+    }
+    seenCards.current.add(id);
 
     const newCards = cards.map(c => c.id === id ? { ...c, flipped: true } : c);
     setCards(newCards);
@@ -89,6 +102,7 @@ const G3_4_PairMatch: React.FC<SubGameProps> = ({
 
       if (firstCard && secondCard && firstCard.pairId === secondCard.pairId) {
         // Đúng cặp
+        speak(`Tìm thấy ${firstCard.emoji} rồi!`);
         setTimeout(() => {
           setCards(prev => prev.map(c => 
             (c.id === firstId || c.id === secondId) ? { ...c, matched: true } : c
@@ -98,6 +112,7 @@ const G3_4_PairMatch: React.FC<SubGameProps> = ({
         }, 600);
       } else {
         // Sai cặp
+        setStats(s => ({ ...s, mistakes: s.mistakes + 1 }));
         setTimeout(() => {
           setCards(prev => prev.map(c => 
             (c.id === firstId || c.id === secondId) ? { ...c, flipped: false } : c
@@ -109,6 +124,31 @@ const G3_4_PairMatch: React.FC<SubGameProps> = ({
     }
   };
 
+  // --- AI TRACKING ---
+  useEffect(() => {
+    const recordLoop = setInterval(() => {
+      const aiData = latestAIResult.current?.features;
+      const gx = aiData?.gazeX ?? 0.5;
+      const gy = aiData?.gazeY ?? 0.5;
+
+      // Kiểm tra tránh né ánh mắt: Không nhìn vào vùng thẻ (giữa màn hình)
+      const isAvoidingScreen = gx < 0.1 || gx > 0.9 || gy < 0.1 || gy > 0.9;
+
+      onFeatureCapture({
+        timestamp: Date.now(),
+        gazeX: gx, gazeY: gy,
+        isLookingAtTarget: !isAvoidingScreen,
+        attentionLevel: aiData?.avgAttention ?? 0.5,
+        // Dữ liệu hành vi chuyên sâu
+        memoryEfficiency: stats.flips > 0 ? (cards.filter(c => c.matched).length / stats.flips) : 0,
+        avoidanceDetected: isAvoidingScreen,
+        totalMistakes: stats.mistakes,
+        roundProgress: (cards.filter(c => c.matched).length / cards.length) * 100
+      } as any);
+    }, 200);
+    return () => clearInterval(recordLoop);
+  }, [onFeatureCapture, latestAIResult, cards, stats]);
+
   // --- STYLES ---
   const styles = `
     .pair-match-container {
@@ -116,65 +156,53 @@ const G3_4_PairMatch: React.FC<SubGameProps> = ({
       background: #E1F5FE; border-radius: 20px;
       display: flex; flex-direction: column; align-items: center; padding: 20px;
     }
-    .timer-bar {
-      width: 90%; height: 12px; background: #FFF; border-radius: 10px; overflow: hidden; margin-bottom: 20px;
-    }
-    .timer-fill {
-      height: 100%; background: #4FC3F7; width: ${(timeElapsed / GAME_DURATION) * 100}%;
-    }
     .grid {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
-      width: 100%; max-width: 500px; flex: 1; align-content: center;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px;
+      width: 100%; max-width: 650px; flex: 1; align-content: center;
     }
     .card {
       aspect-ratio: 1; perspective: 1000px; cursor: pointer;
     }
     .card-inner {
-      position: relative; width: 100%; height: 100%; transition: transform 0.6s;
+      position: relative; width: 100%; height: 100%; transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
       transform-style: preserve-3d;
     }
     .card.flipped .card-inner { transform: rotateY(180deg); }
-    .card.matched { animation: bounce 0.5s; opacity: 0.7; }
-    
     .front, .back {
       position: absolute; width: 100%; height: 100%; backface-visibility: hidden;
-      border-radius: 20px; display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 6px 0 rgba(0,0,0,0.1); border: 4px solid white;
+      border-radius: 15px; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 0 rgba(0,0,0,0.1); border: 4px solid white;
     }
-    .back { background: linear-gradient(135deg, #FF80AB, #F06292); color: white; font-size: 50px; }
-    .front { background: white; transform: rotateY(180deg); font-size: 70px; }
-    
-    .feedback { font-size: 26px; font-weight: bold; color: #0277BD; margin-top: 20px; background: white; padding: 10px 30px; border-radius: 30px; }
-    @keyframes bounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+    .back { background: #FF4081; color: white; font-size: 40px; }
+    .front { background: white; transform: rotateY(180deg); font-size: 60px; }
+    .feedback { font-size: 24px; font-weight: bold; color: #0277BD; margin-top: 15px; }
   `;
 
   return (
     <div className="pair-match-container">
       <style>{styles}</style>
       
-      <div className="timer-bar"><div className="timer-fill" /></div>
-      
-      <div style={{fontSize: '24px', fontWeight: 'bold', color: '#01579B', marginBottom: '10px'}}>
-        Màn {round}: Tìm đôi bạn thân! 👫
+      <div style={{fontSize: '28px', fontWeight: 'bold', color: '#01579B', marginBottom: '20px'}}>
+        Màn {round}: Tìm cặp giống nhau! 🧩
       </div>
 
       <div className="grid">
         {cards.map(card => (
           <div 
             key={card.id} 
-            className={`card ${card.flipped || card.matched ? 'flipped' : ''} ${card.matched ? 'matched' : ''}`}
+            className={`card ${card.flipped || card.matched ? 'flipped' : ''}`}
             onClick={() => handleCardClick(card.id)}
           >
             <div className="card-inner">
               <div className="front">{card.emoji}</div>
-              <div className="back">⭐</div>
+              <div className="back">❓</div>
             </div>
           </div>
         ))}
       </div>
 
       <div className="feedback">
-        {cards.every(c => c.matched) ? 'Bé giỏi quá! 🎉' : 'Bé chạm vào thẻ nào!'}
+        {cards.every(c => c.matched) ? 'Xuất sắc quá! 🌟' : 'Tìm 2 hình giống nhau nhé!'}
       </div>
     </div>
   );

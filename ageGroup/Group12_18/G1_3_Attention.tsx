@@ -1,252 +1,192 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SubGameProps, BehavioralFeature } from '../../types';
 
-const G1_3_Attention: React.FC<SubGameProps> = ({ latestAIResult, onFeatureCapture, timeElapsed, childName }) => {
+// Mở rộng interface để ghi nhận Head Pose
+interface ExtendedAttentionFeature extends BehavioralFeature {
+  headYaw: number;   // Quay trái/phải
+  headPitch: number; // Ngẩng lên/cúi xuống
+  isTrainActive: boolean;
+  soundDirection: 'left' | 'right' | 'center';
+}
+
+const G1_3_Attention: React.FC<SubGameProps> = ({ 
+  latestAIResult, 
+  onFeatureCapture, 
+  timeElapsed, 
+  childName 
+}) => {
   // --- CSS NỘI BỘ ---
   const styles = `
     .attention-game {
       width: 100%;
       height: 100%;
-      background: linear-gradient(180deg, #f0fdf4 0%, #dcfce7 100%);
+      background: linear-gradient(180deg, #38bdf8 0%, #bae6fd 100%); /* Sky Blue */
       position: relative;
       overflow: hidden;
       border-radius: 20px;
-      box-shadow: inset 0 0 20px rgba(0,0,0,0.05);
     }
 
-    .game-timer {
+    .cloud {
       position: absolute;
-      top: 20px;
-      right: 20px;
-      background: rgba(0, 0, 0, 0.7);
-      color: white;
-      padding: 10px 20px;
-      border-radius: 20px;
-      font-size: 16px;
-      font-weight: bold;
-      z-index: 10;
+      background: white;
+      border-radius: 50px;
+      opacity: 0.8;
+      animation: drift linear infinite;
+    }
+
+    @keyframes drift {
+      from { transform: translateX(-150px); }
+      to { transform: translateX(calc(100vw + 150px)); }
+    }
+
+    .train-container {
+      position: absolute;
+      bottom: 15%;
+      left: -100%;
+      font-size: 5rem;
+      white-space: nowrap;
+      transition: left 4s linear;
+      z-index: 20;
+      filter: drop-shadow(0 10px 10px rgba(0,0,0,0.2));
+    }
+
+    .train-active {
+      left: 120%;
     }
 
     .animal-emoji {
       position: absolute;
-      font-size: 4rem;
+      font-size: 3.5rem;
       transform: translate(-50%, -50%);
-      animation: popIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-      cursor: pointer;
-      filter: drop-shadow(0 4px 4px rgba(0,0,0,0.1));
-      transition: top 0.5s, left 0.5s;
+      z-index: 10;
     }
 
-    @keyframes popIn {
-      from { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-      to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-    }
-
-    .surprise-overlay {
+    .direction-indicator {
       position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(255, 255, 255, 0.9);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 50;
-      animation: fadeIn 0.3s ease-out;
-      backdrop-filter: blur(5px);
-    }
-
-    .surprise-content {
-      text-align: center;
-      animation: bounceIn 1s infinite;
-    }
-
-    .surprise-content h1 {
-      font-size: 2.5rem;
-      color: #ea580c; /* Orange-600 */
-      margin-bottom: 10px;
-    }
-    
-    .surprise-content span {
-      color: #db2777; /* Pink-600 */
-      font-weight: 900;
-      margin: 0 10px;
-      text-decoration: underline decoration-wavy;
-    }
-
-    .surprise-content p {
-      font-size: 1.5rem;
-      color: #4b5563;
-    }
-
-    .game-instruction {
-      position: absolute;
-      bottom: 20px;
-      width: 100%;
-      text-align: center;
-      color: #166534;
-      font-size: 1.2rem;
-      font-weight: bold;
-      opacity: 0.8;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-
-    @keyframes bounceIn {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.1); }
+      top: 50%;
+      font-size: 3rem;
+      opacity: 0;
+      transition: opacity 0.5s;
     }
   `;
 
-  // --- LOGIC GAME ---
+  // --- LOGIC & STATE ---
   const [animals, setAnimals] = useState<{id: number, emoji: string, x: number, y: number}[]>([]);
-  const [showSurprise, setShowSurprise] = useState(false);
+  const [showTrain, setShowTrain] = useState(false);
+  const [soundDir, setSoundDir] = useState<'left' | 'right' | 'center'>('center');
   
-  const animalEmojis = ['🐶', '🐱', '🐰', '🐻', '🦁', '🐼', '🐨', '🦊', '🐸', '🌟', '🌈'];
-  
-  const intervalRefs = useRef<NodeJS.Timeout[]>([]);
-  const bgMusicRef = useRef<AudioContext | null>(null);
-  const oscillatorRef = useRef<OscillatorNode | null>(null);
-  
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const pannerRef = useRef<StereoPannerNode | null>(null);
+  const lastReactionTime = useRef<number>(Date.now());
+  const initialHeadYaw = useRef<number | null>(null);
+
   const GAME_DURATION = 120;
 
-  // 1. TEXT-TO-SPEECH (Gọi tên bé)
-  const speakChildName = (name: string) => {
-    if ('speechSynthesis' in window) {
-      // Hủy các câu nói trước đó để tránh chồng chéo
-      window.speechSynthesis.cancel();
+  // 1. SOUND LOGIC: ÂM THANH ĐỊNH HƯỚNG
+  const playStereoVoice = (text: string, panValue: number) => {
+    if (!('speechSynthesis' in window)) return;
+    
+    // Cập nhật hướng âm thanh để UI biết
+    setSoundDir(panValue < 0 ? 'left' : 'right');
+    
+    // Lưu Head Pose hiện tại để so sánh phản ứng
+    const aiData = latestAIResult.current?.features;
+    if (aiData) lastReactionTime.current = Date.now();
 
-      const text = `Bé ${name} ơi! Nhìn này!`;
-      const utterance = new SpeechSynthesisUtterance(text);
-      
-      utterance.lang = 'vi-VN'; // Giọng tiếng Việt
-      utterance.rate = 1.1; // Tốc độ hơi nhanh một chút cho vui vẻ
-      utterance.pitch = 1.2; // Giọng cao hơn một chút (giống giọng trẻ con/hoạt hình)
-      utterance.volume = 1;
-
-      window.speechSynthesis.speak(utterance);
-    }
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'vi-VN';
+    utterance.rate = 1.0;
+    
+    // Lưu ý: speechSynthesis mặc định không hỗ trợ Stereo Panning trực tiếp, 
+    // nhưng ta đánh dấu dữ liệu soundDirection để AI phân tích phản ứng của trẻ.
+    window.speechSynthesis.speak(utterance);
   };
 
-  // 2. BACKGROUND MUSIC GENERATOR (Nhạc nền nhẹ nhàng)
-  const startBackgroundMusic = () => {
+  // 2. SOUND LOGIC: TIẾNG TÀU HỎA (MẠNH)
+  const playTrainSound = () => {
     try {
-      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContext) return;
-
-      const ctx = new AudioContext();
-      bgMusicRef.current = ctx;
-
-      // Tạo một Oscillator để giả lập tiếng nhạc nền (dạng chuông gió nhẹ)
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const osc = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-
-      osc.type = 'sine';
-      // Tần số thấp, êm dịu
-      osc.frequency.setValueAtTime(200, ctx.currentTime); 
+      const gain = ctx.createGain();
       
-      // Hiệu ứng LFO (Low Frequency Oscillator) để làm âm thanh dao động nhẹ như sóng
-      const lfo = ctx.createOscillator();
-      lfo.type = 'sine';
-      lfo.frequency.value = 0.5; // Dao động chậm (0.5Hz)
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(150, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 3);
       
-      const lfoGain = ctx.createGain();
-      lfoGain.gain.value = 50; // Biên độ dao động tần số
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 4);
       
-      lfo.connect(lfoGain);
-      lfoGain.connect(osc.frequency);
-      lfo.start();
-
-      // Volume rất nhỏ để làm nền
-      gainNode.gain.setValueAtTime(0.02, ctx.currentTime);
-
-      osc.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
       osc.start();
-      oscillatorRef.current = osc;
-
-    } catch (e) {
-      console.error("Không thể phát nhạc nền:", e);
-    }
+      osc.stop(ctx.currentTime + 4);
+    } catch (e) { console.error(e); }
   };
 
-  const stopBackgroundMusic = () => {
-    if (oscillatorRef.current) {
-      oscillatorRef.current.stop();
-      oscillatorRef.current.disconnect();
-    }
-    if (bgMusicRef.current) {
-      bgMusicRef.current.close();
-    }
-  };
-
-  // 3. GAME LOOP
+  // 3. CHU KỲ TRÒ CHƠI
   useEffect(() => {
-    // Bật nhạc nền khi game bắt đầu
-    startBackgroundMusic();
+    // Spawn chim bay/thú
+    const interval = setInterval(() => {
+      setAnimals(prev => [...prev.slice(-3), {
+        id: Math.random(),
+        emoji: ['☁️', '🐦', '🎈', '🦅'][Math.floor(Math.random() * 4)],
+        x: Math.random() * 80 + 10,
+        y: Math.random() * 40 + 10
+      }]);
+    }, 3000);
 
-    // Spawn Animals (Xuất hiện thú)
-    const spawnInterval = setInterval(() => {
-      setAnimals(prev => {
-        // Giữ tối đa 7 con trên màn hình
-        const newAnimals = prev.length > 6 ? prev.slice(1) : prev;
-        return [...newAnimals, {
-          id: Math.random(),
-          emoji: animalEmojis[Math.floor(Math.random() * animalEmojis.length)],
-          x: Math.random() * 80 + 10,
-          y: Math.random() * 80 + 10
-        }];
-      });
-    }, 1500);
-    intervalRefs.current.push(spawnInterval);
+    // Kích hoạt chuỗi sự kiện: Gọi tên -> Check phản ứng -> Tàu hỏa
+    const eventSequence = setInterval(() => {
+      const side = Math.random() > 0.5 ? 1 : -1; // 1: Phải, -1: Trái
+      playStereoVoice(`Bé ${childName || ''} ơi, nhìn bên ${side > 0 ? 'phải' : 'trái'} kìa!`, side);
 
-    // Sự kiện bất ngờ (Surprise) + Gọi tên bé
-    const surpriseInterval = setInterval(() => {
-      setShowSurprise(true);
-      
-      // Gọi tên bé!
-      speakChildName(childName || "ơi");
-
+      // Sau 3 giây, kiểm tra phản ứng head pose
       setTimeout(() => {
-        setShowSurprise(false);
-      }, 4000); // Hiện lâu hơn chút để bé kịp nhìn
-    }, 15000); // Mỗi 15 giây
-    intervalRefs.current.push(surpriseInterval);
+        const currentYaw = latestAIResult.current?.features?.headYaw ?? 0;
+        const headMoved = Math.abs(currentYaw) > 15; // Ngưỡng quay đầu 15 độ
+
+        if (!headMoved) {
+          // Trẻ không phản ứng -> Kích thích mạnh bằng tàu hỏa
+          setShowTrain(true);
+          playTrainSound();
+          setTimeout(() => setShowTrain(false), 5000);
+        }
+      }, 3000);
+
+    }, 15000);
 
     return () => {
-      intervalRefs.current.forEach(interval => clearInterval(interval));
-      intervalRefs.current = [];
-      stopBackgroundMusic(); // Tắt nhạc khi thoát
-      window.speechSynthesis.cancel(); // Tắt giọng nói
+      clearInterval(interval);
+      clearInterval(eventSequence);
+      window.speechSynthesis.cancel();
     };
   }, [childName]);
 
-  // 4. DATA RECORDING (Ghi hình)
+  // 4. DATA CAPTURE
   useEffect(() => {
     const recordLoop = setInterval(() => {
       const aiData = latestAIResult.current?.features;
       
-      // Logic xác định mục tiêu nhìn
-      const targetX = showSurprise ? 50 : (animals.length > 0 ? animals[animals.length-1].x : 50);
-      const targetY = showSurprise ? 50 : (animals.length > 0 ? animals[animals.length-1].y : 50);
-      
-      const feature: BehavioralFeature = {
+      const feature: ExtendedAttentionFeature = {
         timestamp: Date.now(),
         gazeX: aiData?.gazeX ?? 0.5,
         gazeY: aiData?.gazeY ?? 0.5,
-        targetX,
-        targetY,
-        targetSize: showSurprise ? 300 : 100, // Surprise to hơn
+        targetX: showTrain ? 50 : 50,
+        targetY: showTrain ? 80 : 30,
+        targetSize: showTrain ? 400 : 100,
+        audioStimulus: showTrain ? "train_loud_horn" : (soundDir !== 'center' ? "directional_voice" : "ambient"),
         
-        // Cập nhật Audio Stimulus: Đang có nhạc nền hoặc giọng nói
-        audioStimulus: showSurprise ? "voice_call_name" : "background_music_gentle",
+        // Dữ liệu Head Pose bổ sung
+        headYaw: aiData?.headYaw ?? 0,
+        headPitch: aiData?.headPitch ?? 0,
+        isTrainActive: showTrain,
+        soundDirection: soundDir,
         
-        isLookingAtTarget: false, // Sẽ tính toán sau
+        isLookingAtTarget: false,
         attentionLevel: aiData?.avgAttention ?? 0.5,
         smileIntensity: aiData?.avgSmile ?? 0,
-        frownIntensity: 0,
+        frownIntensity: aiData?.avgFrown ?? 0,
         affect: 'neutral',
         poseConfidence: aiData?.faceDetectionConfidence ?? 0,
         faceConfidence: aiData?.faceDetectionConfidence ?? 0
@@ -255,57 +195,38 @@ const G1_3_Attention: React.FC<SubGameProps> = ({ latestAIResult, onFeatureCaptu
     }, 100);
 
     return () => clearInterval(recordLoop);
-  }, [showSurprise, animals, onFeatureCapture, latestAIResult]);
+  }, [showTrain, soundDir, onFeatureCapture, latestAIResult]);
 
   return (
-    <div className="game-container attention-game">
+    <div className="attention-game">
       <style>{styles}</style>
       
       <div className="game-timer">
         ⏱️ {timeElapsed}s / {GAME_DURATION}s
       </div>
-      
-      {/* Render Animals */}
+
+      {/* Trang trí mây */}
+      <div className="cloud" style={{ top: '10%', width: '100px', height: '40px', animationDuration: '20s' }} />
+      <div className="cloud" style={{ top: '25%', width: '150px', height: '60px', animationDuration: '35s', animationDelay: '-10s' }} />
+
+      {/* Render Animals/Objects */}
       {animals.map(a => (
-        <div 
-          key={a.id} 
-          className="animal-emoji"
-          style={{ 
-            left: `${a.x}%`, 
-            top: `${a.y}%`
-          }}
-          // Hiệu ứng nhẹ khi hover chuột (dành cho desktop testing)
-          onMouseEnter={(e) => {
-             e.currentTarget.style.transform = "translate(-50%, -50%) scale(1.2)";
-          }}
-          onMouseLeave={(e) => {
-             e.currentTarget.style.transform = "translate(-50%, -50%) scale(1)";
-          }}
-        >
+        <div key={a.id} className="animal-emoji" style={{ left: `${a.x}%`, top: `${a.y}%` }}>
           {a.emoji}
         </div>
       ))}
-      
-      {/* Surprise Overlay */}
-      {showSurprise && (
-        <div className="surprise-overlay">
-          <div className="surprise-content">
-            <h1>
-              🎉 
-              <span>
-                {childName || "Bé"} ơi!
-              </span>
-              👋
-            </h1>
-            <p>
-              Nhìn này! Có gì đặc biệt nè! ✨
-            </p>
-          </div>
-        </div>
-      )}
-      
-      <div className="game-instruction">
-        Theo dõi các bạn thú và lắng nghe nhé! 🎧
+
+      {/* Tàu hỏa chạy ngang */}
+      <div className={`train-container ${showTrain ? 'train-active' : ''}`}>
+        🚂 Gầm gừ... Tu tu xình xịch! 🚃🚃🚃
+      </div>
+
+      {/* Chỉ báo hướng âm thanh (Dành cho việc debug/quan sát của phụ huynh) */}
+      <div className="direction-indicator" style={{ left: '5%', opacity: soundDir === 'left' ? 1 : 0 }}>🔈👈</div>
+      <div className="direction-indicator" style={{ right: '5%', opacity: soundDir === 'right' ? 1 : 0 }}>👉🔈</div>
+
+      <div className="game-instruction" style={{ position: 'absolute', bottom: '5%', width: '100%', textAlign: 'center', color: '#0369a1', fontWeight: 'bold' }}>
+        {showTrain ? "Ối! Tàu hỏa đến kìa! 🚂" : "Lắng nghe xem tiếng gọi ở đâu nhé? 👂"}
       </div>
     </div>
   );

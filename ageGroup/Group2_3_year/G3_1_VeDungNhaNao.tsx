@@ -1,171 +1,189 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { SubGameProps, BehavioralFeature } from '../../types';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { SubGameProps } from '../../types';
 
-const G3_1_AnimalHome: React.FC<SubGameProps> = ({ 
+const G3_SortingGame: React.FC<SubGameProps> = ({ 
   latestAIResult, 
   onFeatureCapture, 
   timeElapsed,
 }) => {
-  // --- KHO DỮ LIỆU CON VẬT PHONG PHÚ ---
-  const animalLibrary = useMemo(() => [
-    { id: 1, emoji: '🐶', name: 'Cún con', color: '#FFB347' },
-    { id: 2, emoji: '🐱', name: 'Mèo con', color: '#81D4FA' },
-    { id: 3, emoji: '🐰', name: 'Bạn Thỏ', color: '#F48FB1' },
-    { id: 4, emoji: '🐤', name: 'Gà chíp', color: '#FFF176' },
-    { id: 5, emoji: '🐸', name: 'Bạn Ếch', color: '#81C784' },
-    { id: 6, emoji: '🐷', name: 'Ủn Ỉn', color: '#F8BBD0' },
-    { id: 7, emoji: '🦁', name: 'Sư tử', color: '#FFCC80' },
-    { id: 8, emoji: '🐘', name: 'Voi con', color: '#B0BEC5' },
-    { id: 9, emoji: '🐼', name: 'Gấu trúc', color: '#EEEEEE' },
-    { id: 10, emoji: '🐮', name: 'Bạn Bò', color: '#D7CCC8' },
+  // --- KHO DỮ LIỆU ĐỒ VẬT ---
+  const itemLibrary = useMemo(() => [
+    { id: 'f1', emoji: '🍎', type: 'FRUIT', name: 'Quả táo' },
+    { id: 'f2', emoji: '🍌', type: 'FRUIT', name: 'Quả chuối' },
+    { id: 'f3', emoji: '🍇', type: 'FRUIT', name: 'Quả nho' },
+    { id: 'f4', emoji: '🍓', type: 'FRUIT', name: 'Quả dâu' },
+    { id: 'v1', emoji: '🚗', type: 'VEHICLE', name: 'Xe hơi' },
+    { id: 'v2', emoji: '🚲', type: 'VEHICLE', name: 'Xe đạp' },
+    { id: 'v3', emoji: '✈️', type: 'VEHICLE', name: 'Máy bay' },
+    { id: 'v4', emoji: '🚢', type: 'VEHICLE', name: 'Tàu thủy' },
   ], []);
 
-  const GAME_DURATION = 180; // 3 phút
+  const GAME_DURATION = 180;
 
-  // Hàm xáo trộn (Shuffle)
-  const shuffle = (arr: any[]) => [...arr].sort(() => Math.random() - 0.5);
+  // --- STATE ---
+  const [currentItem, setCurrentItem] = useState<any>(null);
+  const [feedback, setFeedback] = useState('Bé hãy kéo đồ vật về đúng nhà nhé! 🏠');
+  const [isDragging, setIsDragging] = useState(false);
+  const [score, setScore] = useState(0);
 
-  // State quản lý màn chơi hiện tại
-  const [gameState, setGameState] = useState(() => {
-    const selected = shuffle(animalLibrary).slice(0, 3);
-    return {
-      animals: selected.map(a => ({ ...a, placed: false })),
-      homes: shuffle(selected).map(a => ({ id: a.id, color: a.color, animalId: null })),
-    };
-  });
+  // Tạo đồ vật mới ngẫu nhiên
+  const spawnItem = useCallback(() => {
+    const randomIndex = Math.floor(Math.random() * itemLibrary.length);
+    setCurrentItem({ ...itemLibrary[randomIndex], key: Date.now() });
+  }, [itemLibrary]);
 
-  const [selectedAnimal, setSelectedAnimal] = useState<number | null>(null);
-  const [feedback, setFeedback] = useState('Bé tìm nhà cho các bạn nhé! 🐾');
-
-  // Reset sang màn mới với con vật mới
-  const nextRound = useCallback(() => {
-    const selected = shuffle(animalLibrary).slice(0, 3);
-    setGameState({
-      animals: selected.map(a => ({ ...a, placed: false })),
-      homes: shuffle(selected).map(a => ({ id: a.id, color: a.color, animalId: null })),
-    });
-    setFeedback('Tuyệt quá! Thêm các bạn mới nè! ✨');
-    setSelectedAnimal(null);
-  }, [animalLibrary]);
-
-  // Kiểm tra hoàn thành màn
   useEffect(() => {
-    if (gameState.animals.every(a => a.placed)) {
-      const timer = setTimeout(nextRound, 1200);
-      return () => clearTimeout(timer);
-    }
-  }, [gameState.animals, nextRound]);
+    spawnItem();
+  }, [spawnItem]);
 
-  const handleAnimalClick = (id: number) => {
-    setSelectedAnimal(id);
-    const animal = gameState.animals.find(a => a.id === id);
-    setFeedback(`Đưa bạn ${animal?.name} về nhà nào!`);
+  const speak = (text: string) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const msg = new SpeechSynthesisUtterance(text);
+      msg.lang = 'vi-VN';
+      msg.rate = 0.9;
+      window.speechSynthesis.speak(msg);
+    }
   };
 
-  const handleHomeClick = (homeId: number) => {
-    if (selectedAnimal === null) return;
-    const animal = gameState.animals.find(a => a.id === selectedAnimal);
-    
-    if (animal && animal.id === homeId) {
-      setGameState(prev => ({
-        animals: prev.animals.map(a => a.id === selectedAnimal ? { ...a, placed: true } : a),
-        homes: prev.homes.map(h => h.id === homeId ? { ...h, animalId: selectedAnimal } : h)
-      }));
-      setFeedback(`Đúng rồi! Hoan hô bé! 👏`);
-      setSelectedAnimal(null);
+  // --- XỬ LÝ KÉO THẢ ---
+  const onDragStart = (e: React.DragEvent) => {
+    setIsDragging(true);
+    e.dataTransfer.setData("itemType", currentItem.type);
+    speak(currentItem.name);
+  };
+
+  const onDrop = (e: React.DragEvent, targetType: string) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const draggedType = e.dataTransfer.getData("itemType");
+
+    if (draggedType === targetType) {
+      setFeedback('Đúng rồi! Bé giỏi quá! ✨');
+      setScore(s => s + 1);
+      speak("Đúng rồi!");
+      setCurrentItem(null);
+      setTimeout(spawnItem, 1000);
     } else {
-      setFeedback('Nhầm nhà rồi! Bé tìm nhà cùng màu nhé! ❤️');
+      setFeedback('Nhầm nhà rồi, bé chọn lại nhé! ❤️');
+      speak("Không phải nhà này rồi");
     }
   };
+
+  // --- RECORD AI DATA ---
+  useEffect(() => {
+    const recordLoop = setInterval(() => {
+      const aiData = latestAIResult.current?.features;
+      onFeatureCapture({
+        timestamp: Date.now(),
+        gazeX: aiData?.gazeX ?? 0.5,
+        gazeY: aiData?.gazeY ?? 0.5,
+        targetX: 50, targetY: 50,
+        isLookingAtTarget: false,
+        attentionLevel: aiData?.avgAttention ?? 0.5,
+        affect: feedback.includes('Đúng') ? 'positive' : 'neutral',
+        // Custom fields cho việc phân loại
+        currentItemType: currentItem?.type || null,
+        dragActive: isDragging,
+        totalCorrect: score
+      } as any);
+    }, 100);
+    return () => clearInterval(recordLoop);
+  }, [onFeatureCapture, latestAIResult, currentItem, isDragging, feedback, score]);
 
   // --- GIAO DIỆN ---
   const styles = `
-    .game-container {
+    .sort-container {
       width: 100%; height: 100%; position: relative;
-      background: #F1F8E9; border-radius: 20px;
+      background: #E8F5E9; border-radius: 20px;
       display: flex; flex-direction: column; align-items: center; padding: 20px;
       overflow: hidden;
     }
     .progress-bar {
-      width: 90%; height: 15px; background: #E0E0E0;
-      border-radius: 10px; margin-bottom: 20px; overflow: hidden;
+      width: 100%; height: 10px; background: #ddd; border-radius: 5px; margin-bottom: 20px;
     }
     .progress-fill {
-      height: 100%; background: #66BB6A;
-      width: ${Math.min(100, (timeElapsed / GAME_DURATION) * 100)}%;
-      transition: width 1s linear;
+      height: 100%; background: #4CAF50; width: ${(timeElapsed / GAME_DURATION) * 100}%;
     }
-    .play-area {
-      flex: 1; width: 100%; display: flex; flex-direction: column;
-      justify-content: space-evenly; align-items: center;
+    .homes-row {
+      display: flex; justify-content: space-between; width: 100%; flex: 1; align-items: center;
     }
-    .row { display: flex; gap: 30px; justify-content: center; width: 100%; }
-    .card {
-      width: 130px; height: 130px; border-radius: 25px;
-      background: white; display: flex; align-items: center; justify-content: center;
-      font-size: 70px; cursor: pointer; border: 6px solid white;
-      box-shadow: 0 6px 12px rgba(0,0,0,0.1); transition: transform 0.2s;
+    .home-box {
+      width: 280px; height: 320px; border-radius: 40px;
+      background: white; border: 6px dashed #999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      transition: all 0.3s;
     }
-    .card.active { transform: scale(1.15); border-color: #FFD54F; box-shadow: 0 0 20px #FFD54F; }
-    .card.hidden { visibility: hidden; }
-    .home-target {
-      width: 150px; height: 150px; border-radius: 30px;
-      border: 5px dashed rgba(0,0,0,0.15); display: flex;
-      align-items: center; justify-content: center; font-size: 75px;
+    .home-box.active-drop { border-color: #4CAF50; background: #F1F8E9; transform: scale(1.05); }
+    .home-icon { font-size: 80px; margin-bottom: 10px; }
+    .home-label { font-size: 28px; font-weight: bold; color: #2E7D32; }
+
+    .center-spawn {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 10;
     }
-    .bubble {
-      background: white; padding: 15px 40px; border-radius: 50px;
-      font-size: 22px; font-weight: bold; color: #455A64;
-      box-shadow: 0 4px 0 #CFD8DC; margin-top: 10px;
+    .draggable-item {
+      font-size: 100px; cursor: grab;
+      filter: drop-shadow(0 10px 15px rgba(0,0,0,0.2));
+      animation: appear 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    @keyframes appear {
+      from { transform: scale(0) rotate(-20deg); opacity: 0; }
+      to { transform: scale(1) rotate(0); opacity: 1; }
+    }
+    .feedback-bubble {
+      margin-top: 20px; background: white; padding: 15px 40px;
+      border-radius: 30px; font-size: 24px; font-weight: bold; color: #388E3C;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
     }
   `;
 
   return (
-    <div className="game-container">
+    <div className="sort-container">
       <style>{styles}</style>
-      
+
       <div className="progress-bar">
         <div className="progress-fill" />
       </div>
 
-      <div className="play-area">
-        <div className="row">
-          {gameState.animals.map(animal => (
-            <div
-              key={animal.id}
-              className={`card ${selectedAnimal === animal.id ? 'active' : ''} ${animal.placed ? 'hidden' : ''}`}
-              style={{ backgroundColor: animal.color }}
-              onClick={() => handleAnimalClick(animal.id)}
-            >
-              {animal.emoji}
-            </div>
-          ))}
+      <div className="homes-row">
+        {/* Nhà Trái Cây */}
+        <div 
+          className={`home-box ${isDragging ? 'active-drop' : ''}`}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => onDrop(e, 'FRUIT')}
+        >
+          <div className="home-icon">🍎</div>
+          <div className="home-label">Nhà Trái Cây</div>
         </div>
 
-        <div className="row">
-          {gameState.homes.map(home => (
-            <div
-              key={home.id}
-              className="home-target"
-              style={{ 
-                backgroundColor: home.animalId ? home.color : 'white',
-                borderColor: home.color,
-                borderStyle: home.animalId ? 'solid' : 'dashed'
-              }}
-              onClick={() => handleHomeClick(home.id)}
-            >
-              {home.animalId ? 
-                gameState.animals.find(a => a.id === home.animalId)?.emoji : 
-                <span style={{opacity: 0.1}}>🏠</span>
-              }
-            </div>
-          ))}
+        {/* Nhà Phương Tiện */}
+        <div 
+          className={`home-box ${isDragging ? 'active-drop' : ''}`}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => onDrop(e, 'VEHICLE')}
+        >
+          <div className="home-icon">🚗</div>
+          <div className="home-label">Nhà Xe Cộ</div>
         </div>
       </div>
 
-      <div className="bubble">{feedback}</div>
+      <div className="center-spawn">
+        {currentItem && (
+          <div 
+            className="draggable-item"
+            draggable
+            onDragStart={onDragStart}
+            onDragEnd={() => setIsDragging(false)}
+          >
+            {currentItem.emoji}
+          </div>
+        )}
+      </div>
+
+      <div className="feedback-bubble">{feedback}</div>
     </div>
   );
 };
 
-export default G3_1_AnimalHome;
+export default G3_SortingGame;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { SubGameProps, BehavioralFeature } from '../../types';
 
 const G2_3_TiengKeuCuaAi: React.FC<SubGameProps> = ({ 
@@ -6,11 +6,11 @@ const G2_3_TiengKeuCuaAi: React.FC<SubGameProps> = ({
   onFeatureCapture, 
   timeElapsed,
 }) => {
-  // --- CSS TỐI GIẢN ---
+  // --- CSS TỐI ƯU CHO 3 CARD ---
   const styles = `
     .tiengkeu-container {
       width: 100%; height: 100%; position: relative;
-      background: #F0F4C3; /* Màu xanh lá nhạt dịu mắt */
+      background: #F0F4C3;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
     }
     .tiengkeu-timer {
@@ -18,38 +18,33 @@ const G2_3_TiengKeuCuaAi: React.FC<SubGameProps> = ({
       background: rgba(0,0,0,0.4); color: white; padding: 8px 15px; border-radius: 20px;
     }
     .tiengkeu-options {
-      display: flex; gap: 50px; justify-content: center; width: 100%;
+      display: flex; gap: 30px; justify-content: center; width: 90%;
     }
     .tiengkeu-card {
-      background: white; border-radius: 40px; padding: 50px;
+      background: white; border-radius: 40px; padding: 40px; flex: 1; max-width: 250px;
       box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 8px solid transparent;
-      transition: all 0.3s ease; cursor: pointer;
+      transition: all 0.3s ease; cursor: pointer; text-align: center;
     }
     .tiengkeu-card.active { 
       border-color: #CDDC39; 
-      transform: scale(1.15);
+      transform: scale(1.1);
       animation: shake 0.5s infinite;
     }
-    .tiengkeu-emoji { font-size: 140px; }
+    .tiengkeu-emoji { font-size: 100px; }
     
     @keyframes shake {
-      0%, 100% { transform: scale(1.15) rotate(0deg); }
-      25% { transform: scale(1.15) rotate(-5deg); }
-      75% { transform: scale(1.15) rotate(5deg); }
+      0%, 100% { transform: scale(1.1) rotate(0deg); }
+      25% { transform: scale(1.1) rotate(-3deg); }
+      75% { transform: scale(1.1) rotate(3deg); }
     }
 
-    .sound-pulse {
-      position: absolute; width: 300px; height: 300px;
-      border: 15px solid #CDDC39; border-radius: 50%;
-      animation: pulse-out 1.2s infinite; opacity: 0;
+    .mic-indicator {
+      position: absolute; bottom: 20px; right: 20px; font-size: 24px;
+      color: #FF5722; animation: blink 1s infinite;
     }
-    @keyframes pulse-out {
-      0% { transform: scale(0.5); opacity: 1; }
-      100% { transform: scale(1.8); opacity: 0; }
-    }
+    @keyframes blink { 50% { opacity: 0; } }
   `;
 
-  // --- DỮ LIỆU CHỈ GỒM TÊN VÀ TIẾNG KÊU ---
   const animals = useMemo(() => [
     { name: "Con mèo", emoji: "🐱", sound: "Meo meo" },
     { name: "Con chó", emoji: "🐶", sound: "Gâu gâu" },
@@ -59,81 +54,107 @@ const G2_3_TiengKeuCuaAi: React.FC<SubGameProps> = ({
     { name: "Con lợn", emoji: "🐷", sound: "Ụt ịt" }
   ], []);
 
+  // --- STATE ---
   const [displayItems, setDisplayItems] = useState<any[]>([]);
   const [targetIdx, setTargetIdx] = useState(0);
   const [isAnswering, setIsAnswering] = useState(false);
+  const [reactionStartTime, setReactionStartTime] = useState<number>(0);
+  const [isScanning, setIsScanning] = useState(false); // Trẻ có đang nhìn quét qua các con vật?
 
   const GAME_DURATION = 180;
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const speak = (text: string, rate = 0.8) => {
+  const speak = useCallback((text: string, rate = 0.8, onEnd?: () => void) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const msg = new SpeechSynthesisUtterance(text);
       msg.lang = 'vi-VN';
       msg.rate = rate;
-      msg.pitch = 1.1;
+      if (onEnd) msg.onend = onEnd;
       window.speechSynthesis.speak(msg);
     }
-  };
+  }, []);
 
-  const initRound = () => {
+  const initRound = useCallback(() => {
     setIsAnswering(false);
     const shuffled = [...animals].sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, 2);
-    const target = Math.floor(Math.random() * 2);
+    const selected = shuffled.slice(0, 3); // 3 con vật
+    const target = Math.floor(Math.random() * 3);
 
     setDisplayItems(selected);
     setTargetIdx(target);
 
-    // Phát âm thanh ngay: Tên -> Tiếng kêu
+    // FLOW: Tiếng kêu -> Câu hỏi
     setTimeout(() => {
-      speak(`${selected[target].name}. ${selected[target].sound}`);
-    }, 500);
-  };
+      speak(selected[target].sound, 0.7, () => {
+        // Sau khi phát tiếng kêu, hỏi
+        setTimeout(() => {
+          speak("Con nào kêu thế nhỉ? Chạm vào nó đi!");
+          setReactionStartTime(Date.now()); // Bắt đầu tính thời gian phản ứng
+        }, 500);
+      });
+    }, 800);
+  }, [animals, speak]);
 
   useEffect(() => {
     initRound();
-    return () => window.speechSynthesis.cancel();
-  }, [animals]);
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      window.speechSynthesis.cancel();
+    };
+  }, [initRound]);
 
   const handleTap = (idx: number) => {
     if (isAnswering) return;
     
+    const reactionTime = (Date.now() - reactionStartTime) / 1000;
+
     if (idx === targetIdx) {
       setIsAnswering(true);
-      // Chỉ nhắc lại tiếng kêu khi đúng để củng cố phản xạ
-      speak(displayItems[idx].sound, 0.7);
+      speak(`Đúng rồi! ${displayItems[idx].sound}`, 0.8);
       
-      setTimeout(initRound, 3000);
+      // Ghi nhận thành tích ngay lúc này nếu cần qua console hoặc callback
+      console.log(`Phản ứng sau: ${reactionTime}s`);
+      
+      setTimeout(initRound, 3500);
     } else {
-      // Nếu sai, chỉ gọi lại tên con vật đúng để bé nhìn lại
-      speak(displayItems[targetIdx].name);
+      speak(`Ơ kìa, lắng nghe lại nhé! ${displayItems[targetIdx].sound}`);
     }
   };
 
-  // Tracking AI
+  // --- AI TRACKING LOOP ---
   useEffect(() => {
     const recordLoop = setInterval(() => {
       const aiData = latestAIResult.current?.features;
+      const gx = aiData?.gazeX ?? 0.5;
+      const gy = aiData?.gazeY ?? 0.5;
+
+      // Tracking ánh mắt quét qua 3 card (chia màn hình làm 3 cột 0-33, 34-66, 67-100)
+      const lookingAtIdx = gx < 0.33 ? 0 : gx < 0.66 ? 1 : 2;
+      const isLookingAtAnyCard = gy > 0.3 && gy < 0.7;
+
+      // Tracking giả lập Micro (bắt chước tiếng kêu)
+      const isVocalizing = aiData?.isSpeaking || false; // Giả định trường này tồn tại
+
       onFeatureCapture({
         timestamp: Date.now(),
-        gazeX: aiData?.gazeX ?? 0.5,
-        gazeY: aiData?.gazeY ?? 0.5,
-        targetX: targetIdx === 0 ? 30 : 70,
+        gazeX: gx, gazeY: gy,
+        targetX: targetIdx === 0 ? 15 : targetIdx === 1 ? 50 : 85,
         targetY: 50,
-        targetSize: 250,
         audioStimulus: displayItems[targetIdx]?.sound || null,
-        isLookingAtTarget: false,
+        isLookingAtTarget: lookingAtIdx === targetIdx && isLookingAtAnyCard,
+        
+        // --- TRƯỜNG MỚI THEO YÊU CẦU ---
+        reactionTimeSeconds: isAnswering ? (Date.now() - reactionStartTime) / 1000 : null,
+        isScanningOptions: isLookingAtAnyCard, // Đang nhìn vào khu vực các lựa chọn
+        isImitatingSound: isVocalizing && isAnswering, // Trẻ nói khi đang ở màn hình kết quả
+        voiceVolume: aiData?.audioLevel ?? 0,
         attentionLevel: aiData?.avgAttention ?? 0.5,
-        smileIntensity: aiData?.avgSmile ?? 0,
-        frownIntensity: 0,
-        affect: isAnswering ? 'positive' : 'neutral',
-        poseConfidence: aiData?.faceDetectionConfidence ?? 0,
-        faceConfidence: aiData?.faceDetectionConfidence ?? 0
-      });
+        affect: isAnswering ? 'positive' : 'neutral'
+      } as any);
     }, 100);
     return () => clearInterval(recordLoop);
-  }, [onFeatureCapture, latestAIResult, displayItems, targetIdx, isAnswering]);
+  }, [onFeatureCapture, latestAIResult, displayItems, targetIdx, isAnswering, reactionStartTime]);
 
   return (
     <div className="tiengkeu-container">
@@ -141,8 +162,8 @@ const G2_3_TiengKeuCuaAi: React.FC<SubGameProps> = ({
       
       <div className="tiengkeu-timer">⏱️ {timeElapsed}s / {GAME_DURATION}s</div>
 
-      {isAnswering && (
-        <div className="sound-pulse" style={{ left: targetIdx === 0 ? '30%' : '70%', top: '50%' }}></div>
+      {latestAIResult.current?.features?.isSpeaking && (
+        <div className="mic-indicator">🎤 Bé đang nói...</div>
       )}
 
       <div className="tiengkeu-options">
@@ -157,8 +178,10 @@ const G2_3_TiengKeuCuaAi: React.FC<SubGameProps> = ({
         ))}
       </div>
 
-      <div style={{ marginTop: '60px', fontSize: '50px', fontWeight: 'bold', color: '#33691E' }}>
-        {isAnswering ? displayItems[targetIdx].sound : displayItems[targetIdx]?.name}
+      <div style={{ marginTop: '50px', fontSize: '42px', fontWeight: 'bold', color: '#33691E', textAlign: 'center' }}>
+        {isAnswering 
+          ? `Giỏi quá! ${displayItems[targetIdx].sound}` 
+          : "Lắng nghe xem tiếng ai nhỉ?"}
       </div>
     </div>
   );
