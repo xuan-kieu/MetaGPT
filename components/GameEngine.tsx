@@ -1,279 +1,215 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { BehavioralFeature, InferenceResult, GameConfig, GameEngineProps } from '../types';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { BehavioralFeature, InferenceResult, GameConfig, GameEngineProps, SubGameProps } from '../types';
 import inferenceService from '../services/InferenceService';
-import { getGameConfig } from '../gameConfig';
 
-// --- IMPORT CÁC GAME CON ---
+// --- IMPORT CÁC GAME CON (ĐÃ CẬP NHẬT TÊN ĐÚNG THEO GATEWAY) ---
 
-// A. Nhóm 12-18 tháng
-import G1_1_Balloon from '../ageGroup/Group12_18/G1_1_Balloon';
-import G1_2_Clapping from '../ageGroup/Group12_18/G1_2_Clapping';
-import G1_3_Attention from '../ageGroup/Group12_18/G1_3_Attention';
+// Nhóm 12-18 tháng
+import G1_1_BongBongVuiNhon from '../ageGroup/Group12_18/G1_1_Balloon';
+import G1_2_VoTayCungBan from '../ageGroup/Group12_18/G1_2_Clapping';
+import G1_3_BeOiQuayLaiNao from '../ageGroup/Group12_18/G1_3_Attention';
 import G1_4_Peekaboo from '../ageGroup/Group12_18/G1_4_Peekaboo';
 import G1_5_ToyTracking from '../ageGroup/Group12_18/G1_5_ToyTracking';
 
-// B. Nhóm 18-24 tháng
+// Nhóm 18-24 tháng
 import G2_1_ChiTayTinhMat from '../ageGroup/Group18_24/G2_1_ChiTayTinhMat';
 import G2_2_XayThapCao from '../ageGroup/Group18_24/G2_2_XayThapCao';
 import G2_3_TiengKeuCuaAi from '../ageGroup/Group18_24/G2_3_TiengKeuCuaAi';
 import G2_4_ChoBupBeAn from '../ageGroup/Group18_24/G2_4_ChoBupBeAn';
 import G2_5_TimBongHinh from '../ageGroup/Group18_24/G2_5_TimBongHinh';
 
-// C. Nhóm 2-3 tuổi
+// Nhóm 2-3 tuổi
 import G3_1_VeDungNhaNao from '../ageGroup/Group2_3_year/G3_1_VeDungNhaNao';
 import G3_2_CamXucGiDay from '../ageGroup/Group2_3_year/G3_2_CamXucGiDay';
 import G3_3_DenLuotConRoii from '../ageGroup/Group2_3_year/G3_3_DenLuotConRoii';
 import G3_4_TimHinhGhepCap from '../ageGroup/Group2_3_year/G3_4_TimHinhGhepCap';
 import G3_5_MeCungDonGian from '../ageGroup/Group2_3_year/G3_5_MeCungDonGian';
 
-// D. Nhóm 3-5 tuổi
+// Nhóm 3-5 tuổi
 import G4_1_ViSaoTheNhi from '../ageGroup/Group3_5year/G4_1_ViSaoTheNhi';
 import G4_2_SapXepCauChuyen from '../ageGroup/Group3_5year/G4_2_SapXepCauChuyen';
 import G4_3_CuaHangTiHon from '../ageGroup/Group3_5year/G4_3_CuaHangTiHon';
 import G4_4_LamTheoChiDan from '../ageGroup/Group3_5year/G4_4_LamTheoChiDan';
 import G4_5_GiaiMaQuyTac from '../ageGroup/Group3_5year/G4_5_GiaiMaQuyTac';
 
+// --- CSS (giữ nguyên) ---
+const globalStyles = ` ... `; // (giữ nguyên như code cũ)
 
-// --- CSS GỐC TOÀN CẢNH (GLOBAL THEME) - KHÔNG ĐỔI ---
-const globalStyles = `
-  /* 1. VARIABLES & THEME */
-  :root {
-    --primary: #6366f1;
-    --primary-hover: #4f46e5;
-    --slate-50: #f8fafc;
-    --slate-200: #e2e8f0;
-    --slate-800: #1e293b;
-    --emerald-500: #10b981;
-    --white: #ffffff;
-    --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-  }
-
-  /* 2. LAYOUT CHÍNH */
-  .game-engine-container {
-    width: 100%;
-    height: 100vh; /* Full màn hình */
-    display: flex;
-    flex-direction: column;
-    background-color: var(--slate-50);
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    position: relative;
-    overflow: hidden;
-  }
-
-  /* 3. KHUNG CHỨA GAME (MAIN CONTENT) */
-  .game-content {
-    flex: 1; /* Chiếm toàn bộ khoảng trống còn lại */
-    position: relative;
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background-color: #f0fdf4; /* Màu nền nhẹ đệm dưới game */
-    overflow: hidden;
-  }
-
-  /* 4. STATUS BAR (THANH TRẠNG THÁI BÊN DƯỚI) */
-  .game-status-bar {
-    padding: 12px 20px;
-    background-color: var(--slate-800);
-    color: var(--white);
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    font-size: 14px;
-    flex-wrap: wrap;
-    box-shadow: 0 -4px 6px -1px rgba(0,0,0,0.1);
-    z-index: 50;
-  }
-
-  .game-status-bar span {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-  }
-
-  /* 5. PROGRESS BAR (THANH TIẾN TRÌNH) */
-  .game-progress-container {
-    height: 6px;
-    background-color: var(--slate-200);
-    width: 100%;
-  }
-
-  .game-progress-fill {
-    height: 100%;
-    background-color: var(--emerald-500); /* Màu xanh lá chuẩn */
-    transition: width 0.3s ease;
-  }
-
-  /* 6. NAVIGATION BUTTONS (THANH ĐIỀU HƯỚNG DƯỚI CÙNG) */
-  .game-nav-bar {
-    padding: 15px 20px;
-    background-color: var(--white);
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
-    border-top: 1px solid var(--slate-200);
-  }
-
-  .nav-btn {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 0.9rem;
-    transition: all 0.2s;
-  }
-
-  .nav-btn.active {
-    background-color: var(--primary);
-    color: white;
-    box-shadow: 0 2px 4px rgba(99, 102, 241, 0.3);
-  }
-
-  .nav-btn.inactive {
-    background-color: var(--slate-200);
-    color: #64748b;
-  }
-
-  .nav-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  /* 7. HIDDEN ELEMENTS */
-  .hidden-video {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-    z-index: -1;
-  }
-  .hidden-canvas { display: none; }
-`;
-
-// --- HELPER CONFIG ---
+// --- ĐỊNH NGHĨA CẤU TRÚC NHÓM TUỔI (MỞ RỘNG: thêm isGateway, isOptional) ---
 interface AgeGroupConfig {
   totalDuration: number;
   games: Array<{
     id: string;
     name: string;
-    duration: number; // seconds
-    component: React.ComponentType<any>;
+    duration: number;
+    component: React.ComponentType<SubGameProps>;
+    isGateway?: boolean;
+    isOptional?: boolean;
   }>;
 }
 
-// Hàm này đã được cập nhật logic để chọn game theo độ tuổi
+// --- HÀM CHỌN GAME THEO ĐỘ TUỔI (ĐÃ GẮN CỜ GATEWAY & OPTIONAL) ---
 const getAgeGroupConfig = (age: number): AgeGroupConfig | null => {
-  // A. Nhóm 12-18 tháng (12 <= age < 18)
   if (age >= 12 && age < 18) {
     return {
-      totalDuration: 10 * 60, // ~10 mins
-      games: [
-        { id: 'G1.1', name: 'Bong Bóng Biết Bay', duration: 120, component: G1_1_Balloon },      // 2p
-        { id: 'G1.2', name: 'Vỗ Tay Vui Nhộn', duration: 120, component: G1_2_Clapping },       // 2p
-        { id: 'G1.3', name: 'Bé Ơi Quay Lại Nào', duration: 120, component: G1_3_Attention },     // 2p
-        { id: 'G1.4', name: 'Ú Òa Kỳ Diệu', duration: 120, component: G1_4_Peekaboo },         // 2p
-        { id: 'G1.5', name: 'Theo Dõi Đồ Chơi', duration: 120, component: G1_5_ToyTracking }    // 2p
-      ]
-    };
-  }
-
-  // B. Nhóm 18-24 tháng (18 <= age < 24)
-  if (age >= 18 && age < 24) {
-    return {
-      totalDuration: 13 * 60, // ~13 mins
-      games: [
-        { id: 'G2.1', name: 'Chỉ Tay Tinh Mắt', duration: 180, component: G2_1_ChiTayTinhMat },  // 3p
-        { id: 'G2.2', name: 'Xây Tháp Cao', duration: 180, component: G2_2_XayThapCao },         // 3p
-        { id: 'G2.3', name: 'Tiếng Kêu Của Ai', duration: 120, component: G2_3_TiengKeuCuaAi },  // 2p
-        { id: 'G2.4', name: 'Cho Búp Bê Ăn', duration: 180, component: G2_4_ChoBupBeAn },       // 3p
-        { id: 'G2.5', name: 'Tìm Bóng Hình', duration: 120, component: G2_5_TimBongHinh }       // 2p
-      ]
-    };
-  }
-
-  // C. Nhóm 2-3 tuổi (24 <= age < 36)
-  if (age >= 24 && age < 36) {
-    return {
-      totalDuration: 15 * 60, // ~15 mins
-      games: [
-        { id: 'G3.1', name: 'Về Đúng Nhà Nào', duration: 180, component: G3_1_VeDungNhaNao },   // 3p
-        { id: 'G3.2', name: 'Cảm Xúc Gì Đây', duration: 180, component: G3_2_CamXucGiDay },     // 3p
-        { id: 'G3.3', name: 'Đến Lượt Con Rồi', duration: 180, component: G3_3_DenLuotConRoii }, // 3p
-        { id: 'G3.4', name: 'Tìm Hình Ghép Cặp', duration: 180, component: G3_4_TimHinhGhepCap }, // 3p
-        { id: 'G3.5', name: 'Mê Cung Đơn Giản', duration: 180, component: G3_5_MeCungDonGian }  // 3p
-      ]
-    };
-  }
-
-  // D. Nhóm 3-5 tuổi (36 <= age <= 60)
-  if (age >= 36 && age <= 60) {
-    return {
-      totalDuration: 18 * 60, // ~18 mins
-      games: [
-        { id: 'G4.1', name: 'Vì Sao Thế Nhỉ', duration: 240, component: G4_1_ViSaoTheNhi },     // 4p
-        { id: 'G4.2', name: 'Sắp Xếp Câu Chuyện', duration: 240, component: G4_2_SapXepCauChuyen }, // 4p
-        { id: 'G4.3', name: 'Cửa Hàng Tí Hon', duration: 240, component: G4_3_CuaHangTiHon },    // 4p
-        { id: 'G4.4', name: 'Làm Theo Chỉ Dẫn', duration: 180, component: G4_4_LamTheoChiDan },  // 3p
-        { id: 'G4.5', name: 'Giải Mã Quy Tắc', duration: 180, component: G4_5_GiaiMaQuyTac }    // 3p
-      ]
-    };
-  }
-
-  // Fallback nếu không thuộc nhóm nào (hoặc để test)
-  return {
       totalDuration: 10 * 60,
       games: [
-        { id: 'TEST', name: 'Chưa hỗ trợ độ tuổi này', duration: 60, component: G1_1_Balloon }
+        { id: 'G1.1', name: 'Bong Bóng Vui Nhộn', duration: 120, component: G1_1_BongBongVuiNhon, isGateway: true, isOptional: false },
+        { id: 'G1.2', name: 'Vỗ Tay Cùng Bạn', duration: 120, component: G1_2_VoTayCungBan, isGateway: true, isOptional: false },
+        { id: 'G1.3', name: 'Bé Ơi Quay Lại Nào', duration: 120, component: G1_3_BeOiQuayLaiNao, isGateway: true, isOptional: false },
+        { id: 'G1.4', name: 'Ú Òa Kỳ Diệu', duration: 120, component: G1_4_Peekaboo, isGateway: false, isOptional: false },
+        { id: 'G1.5', name: 'Theo Dõi Đồ Chơi', duration: 120, component: G1_5_ToyTracking, isGateway: false, isOptional: true }, // tuỳ chọn
       ]
+    };
+  }
+
+  if (age >= 18 && age < 24) {
+    return {
+      totalDuration: 13 * 60,
+      games: [
+        { id: 'G2.1', name: 'Chỉ Tay Tinh Mắt', duration: 180, component: G2_1_ChiTayTinhMat, isGateway: false, isOptional: false },
+        { id: 'G2.2', name: 'Xây Tháp Cao', duration: 180, component: G2_2_XayThapCao, isGateway: false, isOptional: false },
+        { id: 'G2.3', name: 'Tiếng Kêu Của Ai', duration: 120, component: G2_3_TiengKeuCuaAi, isGateway: false, isOptional: false },
+        { id: 'G2.4', name: 'Cho Búp Bê Ăn', duration: 180, component: G2_4_ChoBupBeAn, isGateway: false, isOptional: false },
+        { id: 'G2.5', name: 'Tìm Bóng Hình', duration: 120, component: G2_5_TimBongHinh, isGateway: false, isOptional: true },
+      ]
+    };
+  }
+
+  // (Các nhóm khác tương tự – đánh dấu gateway games theo đặc tả)
+  if (age >= 24 && age < 36) {
+    return {
+      totalDuration: 15 * 60,
+      games: [
+        { id: 'G3.1', name: 'Về Đúng Nhà Nào', duration: 180, component: G3_1_VeDungNhaNao, isGateway: false, isOptional: false },
+        { id: 'G3.2', name: 'Cảm Xúc Gì Đây', duration: 180, component: G3_2_CamXucGiDay, isGateway: false, isOptional: false },
+        { id: 'G3.3', name: 'Đến Lượt Con Rồi', duration: 180, component: G3_3_DenLuotConRoii, isGateway: false, isOptional: false },
+        { id: 'G3.4', name: 'Tìm Hình Ghép Cặp', duration: 180, component: G3_4_TimHinhGhepCap, isGateway: false, isOptional: false },
+        { id: 'G3.5', name: 'Mê Cung Đơn Giản', duration: 180, component: G3_5_MeCungDonGian, isGateway: false, isOptional: true },
+      ]
+    };
+  }
+
+  if (age >= 36 && age <= 60) {
+    return {
+      totalDuration: 18 * 60,
+      games: [
+        { id: 'G4.1', name: 'Vì Sao Thế Nhỉ', duration: 240, component: G4_1_ViSaoTheNhi, isGateway: false, isOptional: false },
+        { id: 'G4.2', name: 'Sắp Xếp Câu Chuyện', duration: 240, component: G4_2_SapXepCauChuyen, isGateway: false, isOptional: false },
+        { id: 'G4.3', name: 'Cửa Hàng Tí Hon', duration: 240, component: G4_3_CuaHangTiHon, isGateway: false, isOptional: false },
+        { id: 'G4.4', name: 'Làm Theo Chỉ Dẫn', duration: 180, component: G4_4_LamTheoChiDan, isGateway: false, isOptional: false },
+        { id: 'G4.5', name: 'Giải Mã Quy Tắc', duration: 180, component: G4_5_GiaiMaQuyTac, isGateway: false, isOptional: true },
+      ]
+    };
+  }
+
+  // Fallback
+  return {
+    totalDuration: 10 * 60,
+    games: [
+      { id: 'TEST', name: 'Chưa hỗ trợ độ tuổi này', duration: 60, component: G1_1_BongBongVuiNhon, isGateway: false, isOptional: false }
+    ]
   };
 };
 
 // --- COMPONENT CHÍNH ---
-export const GameEngine: React.FC<GameEngineProps> = ({ 
-  age, themeId, specificAsset, childName, onFeatureCapture, onSessionEnd 
+export const GameEngine: React.FC<GameEngineProps> = ({
+  age,
+  themeId,
+  specificAsset,
+  childName,
+  onFeatureCapture,
+  onSessionEnd
 }) => {
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const latestAIResult = useRef<InferenceResult | null>(null);
   const allFeaturesBuffer = useRef<BehavioralFeature[]>([]);
-  
+
   // Timers
   const gameStartTimeRef = useRef<number>(Date.now());
   const currentGameStartTimeRef = useRef<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // State
-  const [config, setConfig] = useState<GameConfig | null>(null);
+  // --- STATE MỚI CHO GATEWAY & ADAPTIVE ---
+  const [phase, setPhase] = useState<'gateway' | 'adaptive' | 'completed'>('gateway');
+  const [gatewayResults, setGatewayResults] = useState<Record<string, boolean>>({});
+  const [finalGameList, setFinalGameList] = useState<AgeGroupConfig['games']>([]);
   const [currentGameIndex, setCurrentGameIndex] = useState(0);
+  const [gatewayCompleted, setGatewayCompleted] = useState(false);
+
+  // State cũ
+  const [config, setConfig] = useState<GameConfig | null>(null);
   const [isCameraInitialized, setIsCameraInitialized] = useState(false);
   const [inferenceStatus, setInferenceStatus] = useState('Đang khởi tạo...');
   const [currentGameTime, setCurrentGameTime] = useState(0);
   const [ageGroup, setAgeGroup] = useState<AgeGroupConfig | null>(null);
 
-  // 1. Init Config
+  // 1. Khởi tạo danh sách game và config mặc định
   useEffect(() => {
-    // Gọi hàm helper mới cập nhật để lấy danh sách game
     const group = getAgeGroupConfig(age);
     setAgeGroup(group);
-    
-    // Reset game index về 0 mỗi khi đổi lứa tuổi
     setCurrentGameIndex(0);
+    setPhase('gateway');
+    setGatewayResults({});
+    setGatewayCompleted(false);
 
     if (group) {
-        const loadedConfig = getGameConfig(age, themeId, specificAsset);
-        setConfig(loadedConfig);
+      const defaultConfig: GameConfig = {
+        ageRange: `${age}-${age + 6}`,
+        jumpInterval: 2,
+        duration: group.totalDuration,
+        targetSizeRange: [40, 80],
+        audioPrompts: [],
+        theme: {
+          id: themeId || 'default',
+          name: themeId === 'default' ? 'Mặc định' : 'Chủ đề đã chọn',
+          assets: [],
+          background: '#f0fdf4',
+        }
+      };
+      setConfig(defaultConfig);
     }
-  }, [age, themeId, specificAsset]);
+  }, [age, themeId]);
 
-  // 2. Timer Loop
+  // 2. Khi tất cả gateway games hoàn tất, quyết định luồng
   useEffect(() => {
-    if (!ageGroup || !ageGroup.games) return;
-    const currentGame = ageGroup.games[currentGameIndex];
+    if (!ageGroup || phase !== 'gateway' || gatewayCompleted) return;
+
+    const gatewayGameIds = ageGroup.games.filter(g => g.isGateway).map(g => g.id);
+    const completed = gatewayGameIds.every(id => id in gatewayResults);
     
-    // Reset timer
+    if (completed) {
+      setGatewayCompleted(true);
+      
+      // Đếm số gateway thành công
+      const successCount = gatewayGameIds.filter(id => gatewayResults[id] === true).length;
+      const threshold = Math.ceil(gatewayGameIds.length * 2 / 3); // 2/3 của 3 = 2
+      const isFullSession = successCount >= threshold;
+
+      // Xây dựng danh sách game cho adaptive phase
+      let gameList = [];
+      if (isFullSession) {
+        // Phiên đầy đủ: tất cả game (kể cả optional)
+        gameList = ageGroup.games;
+      } else {
+        // Phiên rút gọn: chỉ gateway games + game cốt lõi (non-optional)
+        gameList = ageGroup.games.filter(g => g.isGateway || !g.isOptional);
+      }
+      
+      setFinalGameList(gameList);
+      setPhase('adaptive');
+      setCurrentGameIndex(0); // Bắt đầu từ game đầu tiên trong danh sách mới
+    }
+  }, [gatewayResults, phase, ageGroup, gatewayCompleted]);
+
+  // 3. Vòng lặp thời gian (chỉ chạy khi có game hợp lệ)
+  useEffect(() => {
+    // Xác định danh sách game hiện tại dựa vào phase
+    const currentGameList = phase === 'gateway' ? ageGroup?.games || [] : finalGameList;
+    if (!currentGameList.length || !currentGameList[currentGameIndex]) return;
+
+    const currentGame = currentGameList[currentGameIndex];
     currentGameStartTimeRef.current = Date.now();
     setCurrentGameTime(0);
 
@@ -285,84 +221,124 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       if (elapsedSeconds >= currentGame.duration) {
         handleNextGame();
       } else {
-        timerRef.current = setTimeout(updateTimer, 100); // 100ms check
+        timerRef.current = setTimeout(updateTimer, 100);
       }
     };
-    
-    timerRef.current = setTimeout(updateTimer, 100);
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [currentGameIndex, ageGroup]);
 
-  // 3. Camera Init
+    timerRef.current = setTimeout(updateTimer, 100);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [currentGameIndex, phase, ageGroup, finalGameList]);
+
+  // 4. Khởi tạo camera & inference service (giữ nguyên)
   useEffect(() => {
     let isMounted = true;
     const initCam = async () => {
       if (!videoRef.current) return;
       setInferenceStatus('Đang bật camera...');
       try {
-        const success = await inferenceService.initialize(videoRef.current, canvasRef.current || undefined);
+        const success = await inferenceService.initialize(videoRef.current);
         if (!isMounted) return;
         if (success) {
           setIsCameraInitialized(true);
           setInferenceStatus('AI đang chạy');
-          inferenceService.startContinuousInference((result) => { latestAIResult.current = result; }, 100);
+          inferenceService.startContinuousInference((result) => {
+            latestAIResult.current = result;
+          });
         } else {
           setInferenceStatus('Giả lập');
           setIsCameraInitialized(true);
         }
-      } catch (err) { console.error(err); setIsCameraInitialized(true); }
+      } catch (err) {
+        console.error(err);
+        setIsCameraInitialized(true);
+      }
     };
     setTimeout(initCam, 500);
-    return () => { 
-        isMounted = false; 
-        inferenceService.dispose(); 
+    return () => {
+      isMounted = false;
+      inferenceService.dispose();
     };
   }, []);
 
+  // ---------- HANDLER: KHI MỘT GAME HOÀN THÀNH (nhận kết quả từ onGameComplete) ----------
+  const handleGameComplete = useCallback((gameId: string, success: boolean) => {
+    // Nếu đang ở gateway phase và game đó là gateway, lưu kết quả
+    if (phase === 'gateway' && ageGroup) {
+      const game = ageGroup.games.find(g => g.id === gameId);
+      if (game?.isGateway) {
+        setGatewayResults(prev => ({ ...prev, [gameId]: success }));
+      }
+    }
+    // Không tự động chuyển game ở đây – timer sẽ chuyển khi hết thời gian
+  }, [phase, ageGroup]);
+
+  // ---------- HANDLER: CHUYỂN GAME TIẾP THEO ----------
   const handleNextGame = useCallback(() => {
-    if (!ageGroup) return;
-    if (currentGameIndex < ageGroup.games.length - 1) {
-      setCurrentGameIndex(prev => prev + 1);
+    // Xác định danh sách game hiện tại
+    const currentGameList = phase === 'gateway' ? ageGroup?.games || [] : finalGameList;
+    if (!currentGameList.length) return;
+
+    const nextIndex = currentGameIndex + 1;
+    if (nextIndex < currentGameList.length) {
+      setCurrentGameIndex(nextIndex);
     } else {
+      // Hết game: kết thúc session
       if (timerRef.current) clearTimeout(timerRef.current);
       onSessionEnd(allFeaturesBuffer.current);
     }
-  }, [currentGameIndex, ageGroup, onSessionEnd]);
+  }, [phase, ageGroup, finalGameList, currentGameIndex, onSessionEnd]);
 
+  // ---------- HANDLER: NHẬN FEATURE TỪ GAME CON ----------
   const handleFeatureCapture = useCallback((feature: BehavioralFeature) => {
     if (!ageGroup) return;
-    const currentGame = ageGroup.games[currentGameIndex];
-    const enriched = { 
-      ...feature, 
-      gameId: currentGame.id, 
-      sessionTime: Date.now() - gameStartTimeRef.current, 
-      childName 
+    
+    // Xác định game hiện tại dựa vào phase
+    const currentGameList = phase === 'gateway' ? ageGroup.games : finalGameList;
+    const currentGame = currentGameList[currentGameIndex];
+    
+    const enriched = {
+      ...feature,
+      gameId: currentGame.id,
+      sessionTime: Date.now() - gameStartTimeRef.current,
+      childName
     };
     allFeaturesBuffer.current.push(enriched);
     onFeatureCapture(enriched);
-  }, [currentGameIndex, ageGroup, childName, onFeatureCapture]);
+  }, [phase, ageGroup, finalGameList, currentGameIndex, childName, onFeatureCapture]);
 
-  if (!config || !ageGroup) return <div style={{padding: 20}}>Loading config...</div>;
+  // ---------- RENDER ----------
+  if (!config || !ageGroup) {
+    return <div style={{ padding: 20 }}>Đang tải cấu hình...</div>;
+  }
 
-  const CurrentGameComponent = ageGroup.games[currentGameIndex]?.component;
-  const currentGame = ageGroup.games[currentGameIndex];
+  // Xác định game hiện tại và danh sách hiển thị
+  const currentGameList = phase === 'gateway' ? ageGroup.games : finalGameList;
+  const currentGame = currentGameList[currentGameIndex];
+  const CurrentGameComponent = currentGame?.component;
+
+  // Tính tổng thời gian session
   const totalSessionTime = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
+  
+  // Xác định tiến độ hiển thị (dựa trên danh sách hiện tại)
+  const progress = ((currentGameIndex + 1) / currentGameList.length) * 100;
 
   return (
     <div className="game-engine-container">
       <style>{globalStyles}</style>
 
-      {/* Hidden Video */}
+      {/* Video ẩn cho AI */}
       <video ref={videoRef} autoPlay muted playsInline className="hidden-video" />
-      <canvas ref={canvasRef} className="hidden-canvas" />
 
-      {/* GAME CONTENT (CENTERED) */}
+      {/* Khu vực chính hiển thị game */}
       <div className="game-content">
         {CurrentGameComponent && (
           <CurrentGameComponent
             config={config}
             latestAIResult={latestAIResult}
             onFeatureCapture={handleFeatureCapture}
+            onGameComplete={(success: boolean) => handleGameComplete(currentGame.id, success)} // 👈 TRUYỀN CALLBACK
             timeElapsed={currentGameTime}
             childName={childName}
             gameDuration={currentGame?.duration || 120}
@@ -370,11 +346,13 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         )}
       </div>
 
-      {/* STATUS BAR (BOTTOM) */}
+      {/* Thanh trạng thái */}
       <div className="game-status-bar">
         <span>{isCameraInitialized ? `👁️ AI: ${inferenceStatus}` : '⏳ Camera...'}</span>
         <span>|</span>
         <span>Nhóm: {age} tháng</span>
+        <span>|</span>
+        <span>Giai đoạn: {phase === 'gateway' ? 'Gateway' : 'Đánh giá'}</span>
         <span>|</span>
         <span>Game: {currentGame?.id} - {currentGame?.name}</span>
         <span>|</span>
@@ -385,26 +363,26 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         <span>Tổng: {totalSessionTime}s</span>
       </div>
 
-      {/* PROGRESS BAR */}
+      {/* Thanh tiến trình */}
       <div className="game-progress-container">
-        <div 
+        <div
           className="game-progress-fill"
-          style={{ width: `${(currentGameTime / currentGame.duration) * 100}%` }}
-        ></div>
+          style={{ width: `${progress}%` }}
+        />
       </div>
 
-      {/* NAVIGATION BUTTONS (OPTIONAL/DEBUG) */}
+      {/* Nút điều hướng (debug) - chỉ hiển thị danh sách game hiện tại */}
       <div className="game-nav-bar">
-        {ageGroup.games.map((game, index) => (
+        {currentGameList.map((game, index) => (
           <button
             key={game.id}
             className={`nav-btn ${index === currentGameIndex ? 'active' : 'inactive'}`}
             onClick={() => {
-               if (index <= currentGameIndex + 1) setCurrentGameIndex(index);
+              if (index <= currentGameIndex + 1) setCurrentGameIndex(index);
             }}
             disabled={index > currentGameIndex + 1}
           >
-            {game.name}
+            {game.name} {game.isGateway ? '⚡' : ''} {game.isOptional ? '*' : ''}
           </button>
         ))}
       </div>

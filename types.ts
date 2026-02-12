@@ -3,7 +3,27 @@ export enum AppMode {
   CLINICIAN = 'CLINICIAN',
   ADMIN = 'ADMIN'
 }
+export interface Landmark {
+  x: number;
+  y: number;
+  z: number;
+  visibility?: number;
+}
 
+export type Emotion =
+  | 'neutral'
+  | 'happy'
+  | 'sad'
+  | 'angry'
+  | 'surprised'
+  | 'fearful'
+  | 'disgusted';
+  export interface AudioFeatures {
+    volume: number;
+    vad: boolean;
+    pitch?: number;
+  }
+  
 export interface BehavioralFeature {
   timestamp: number;
   gazeX: number;
@@ -14,7 +34,7 @@ export interface BehavioralFeature {
   smileIntensity: number;
   vocalPitch?: number;
   vocalVolume?: number;
-  affect: 'positive' | 'neutral' | 'negative' | 'surprised';
+  affect: Emotion; 
   attentionLevel: number;
   targetX?: number;
   targetY?: number;
@@ -24,6 +44,13 @@ export interface BehavioralFeature {
   gameId?: string;
   sessionTime?: number;
   childName?: string;
+  faceLandmarks?: Landmark[];
+  poseLandmarks?: Landmark[];
+  handLandmarks?: Landmark[][];
+  handConfidence?: number;
+  gaze?: { x: number; y: number; z: number };
+  headStability?: number;
+  audioFeatures?: AudioFeatures; 
 }
 
 export interface BehavioralClassification {
@@ -36,6 +63,7 @@ export interface BehavioralClassification {
   attentionSpan: 'sustained' | 'intermittent' | 'brief';
   responseConsistency: 'consistent' | 'variable' | 'random';
   taskPersistence: 'persistent' | 'moderate' | 'fleeting';
+  
 }
 
 export interface InferenceResult {
@@ -45,7 +73,15 @@ export interface InferenceResult {
   explanation: string;
   behavioralTags: string[];
   behavioralClassification?: BehavioralClassification;
-  features: Record<string, any>;
+  features: {
+    gazeStability: number;
+    windowSize: number;
+    hasFaceData: boolean;
+    timestamp: number;
+    dominantEmotion?: Emotion;
+    avgAttention?: number;
+    [key: string]: any;
+  };
 }
 
 export interface LongitudinalRecord {
@@ -119,6 +155,7 @@ export interface SubGameProps {
   config: GameConfig;
   latestAIResult: React.MutableRefObject<InferenceResult | null>;
   onFeatureCapture: (feature: BehavioralFeature) => void;
+  onGameComplete?: (success: boolean) => void;
   timeElapsed: number;
   childName: string;
   gameDuration?: number;

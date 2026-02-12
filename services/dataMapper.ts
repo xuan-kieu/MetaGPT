@@ -1,78 +1,91 @@
 // src/services/dataMapper.ts
-
-import { BehavioralFeature } from '../types';
+import { BehavioralFeature, Emotion } from '../types';
 import { AssessmentInput, SkillType } from './scoringService';
 
 export class DataMapper {
   
-  /**
-   * HÀM CHÍNH: Chuyển đổi dữ liệu AI thô thành Input cho hệ thống tính điểm
-   */
   static mapSessionToInputs(features: BehavioralFeature[]): AssessmentInput[] {
     const inputs: AssessmentInput[] = [];
-
-    // 1. Nhóm features theo Game ID để xử lý riêng
     const featuresByGame = this.groupByGame(features);
 
-    // 2. Tính toán từng chỉ số dựa trên logic Game
-    
-    // --- KỸ NĂNG LÕI ---
-    inputs.push({
-      skillId: 'response_to_name',
-      observedValue: this.calculateResponseTime(features) // Đơn vị: Giây
-    });
+    for (const [gameId, gameFeatures] of Object.entries(featuresByGame)) {
+      
+      // ---------- Các kỹ năng chuẩn (đã có trong SkillType) ----------
+      inputs.push({
+        skillId: 'response_to_name',
+        observedValue: this.calculateResponseTime(gameFeatures)
+      });
+      inputs.push({
+        skillId: 'joint_attention',
+        observedValue: this.countJointAttentionShifts(gameFeatures)
+      });
+      inputs.push({
+        skillId: 'non_verbal',
+        observedValue: this.calculateEyeContactPercentage(gameFeatures)
+      });
+      inputs.push({
+        skillId: 'emotion_recognition',
+        observedValue: this.calculateEmotionRecognitionScore(gameFeatures)
+      });
 
-    inputs.push({
-      skillId: 'joint_attention',
-      observedValue: this.countJointAttention(features) // Đơn vị: Số lần
-    });
-
-    inputs.push({
-      skillId: 'non_verbal',
-      observedValue: this.calculateEyeContactPercentage(features) // Đơn vị: % thời gian
-    });
-
-    // --- KỸ NĂNG XÃ HỘI ---
-    inputs.push({
-      skillId: 'emotion_recognition',
-      observedValue: this.calculateSmileResponse(features) // Đơn vị: Điểm (0-100)
-    });
-
-    // ... Thêm các skill khác tùy logic game
+      // ---------- Kỹ năng mới – cần được bổ sung vào định nghĩa SkillType ----------
+      // 👇 Ép kiểu tạm thời để code chạy. Về lâu dài, hãy thêm các literal này vào union SkillType trong scoringService.ts
+      inputs.push({
+        skillId: 'imitation' as SkillType,
+        observedValue: this.calculateImitationScore(gameFeatures)
+      });
+      inputs.push({
+        skillId: 'emotional_expression' as SkillType,
+        observedValue: this.calculateEmotionalExpressionScore(gameFeatures)
+      });
+      inputs.push({
+        skillId: 'pretend_play' as SkillType,
+        observedValue: this.calculatePretendPlayScore(gameFeatures)
+      });
+      inputs.push({
+        skillId: 'gaze_stability' as SkillType,
+        observedValue: this.calculateGazeStability(gameFeatures)
+      });
+      inputs.push({
+        skillId: 'hand_eye_coordination' as SkillType,
+        observedValue: this.calculateHandEyeCoordination(gameFeatures)
+      });
+      inputs.push({
+        skillId: 'auditory_response' as SkillType,
+        observedValue: this.calculateAuditoryResponseScore(gameFeatures)
+      });
+    }
 
     return inputs;
   }
 
-  // --- CÁC HÀM TÍNH TOÁN CỤ THỂ (LOGIC GAME) ---
-
+  // -----------------------------------------------------------------
+  //  CÁC HÀM TÍNH TOÁN (giữ nguyên logic như bản trước)
+  // -----------------------------------------------------------------
   private static calculateResponseTime(features: BehavioralFeature[]): number {
-    // Logic: Tìm thời điểm phát âm thanh 'name_call' -> Tìm thời điểm mắt nhìn vào target sau đó
-    const stimulusStart = features.find(f => f.audioStimulus === 'name_call');
-    if (!stimulusStart) return 0; // Không có sự kiện gọi tên
-
-    const response = features.find(f => 
-      f.timestamp > stimulusStart.timestamp && 
-      f.isLookingAtTarget === true
-    );
-
-    if (response) {
-      return (response.timestamp - stimulusStart.timestamp) / 1000; // Đổi ra giây
+    const stimulusEvents = features.filter(f => f.audioStimulus === 'name_call');
+    if (stimulusEvents.length === 0) return 0;
+    let totalLatency = 0, count = 0;
+    for (const stimulus of stimulusEvents) {
+      const response = features.find(f => 
+        f.timestamp > stimulus.timestamp && f.isLookingAtTarget === true
+      );
+      if (response) {
+        totalLatency += (response.timestamp - stimulus.timestamp) / 1000;
+        count++;
+      }
     }
-    return 10; // Nếu không phản ứng, gán mặc định 10 giây (max penalty)
+    return count > 0 ? totalLatency / count : 10;
   }
 
-  private static countJointAttention(features: BehavioralFeature[]): number {
-    // Logic: Đếm số lần chuyển mắt từ Target -> Màn hình -> Target (Gaze Shift)
-    // Đây là logic giả lập, thực tế cần thuật toán phức tạp hơn
-    let shifts = 0;
-    let lookingAtTarget = false;
-
+  private static countJointAttentionShifts(features: BehavioralFeature[]): number {
+    let shifts = 0, wasLooking = false;
     for (const f of features) {
-      if (f.isLookingAtTarget && !lookingAtTarget) {
+      if (f.isLookingAtTarget && !wasLooking) {
         shifts++;
-        lookingAtTarget = true;
+        wasLooking = true;
       } else if (!f.isLookingAtTarget) {
-        lookingAtTarget = false;
+        wasLooking = false;
       }
     }
     return shifts;
@@ -80,24 +93,77 @@ export class DataMapper {
 
   private static calculateEyeContactPercentage(features: BehavioralFeature[]): number {
     if (features.length === 0) return 0;
-    const gazeCount = features.filter(f => f.isLookingAtTarget).length;
-    return (gazeCount / features.length) * 100;
+    const gazeOnTarget = features.filter(f => f.isLookingAtTarget).length;
+    return (gazeOnTarget / features.length) * 100;
   }
 
-  private static calculateSmileResponse(features: BehavioralFeature[]): number {
+  private static calculateImitationScore(features: BehavioralFeature[]): number {
+    if (features.length < 5) return 0;
+    const hasHandData = features.some(f => (f.handLandmarks?.length || 0) > 0);
+    const avgAttention = features.reduce((a, b) => a + b.attentionLevel, 0) / features.length;
+    if (hasHandData && avgAttention > 0.6) return 80;
+    if (avgAttention > 0.5) return 50;
+    return 20;
+  }
+
+  private static calculateEmotionRecognitionScore(features: BehavioralFeature[]): number {
+    const avgSmile = features.reduce((a, b) => a + b.smileIntensity, 0) / features.length;
+    return avgSmile * 100;
+  }
+
+  private static calculateEmotionalExpressionScore(features: BehavioralFeature[]): number {
     if (features.length === 0) return 0;
-    // Lấy cường độ cười trung bình * 100
-    const totalSmile = features.reduce((sum, f) => sum + (f.smileIntensity || 0), 0);
-    return (totalSmile / features.length) * 100;
+    const nonNeutral = features.filter(f => f.affect !== 'neutral').length;
+    return (nonNeutral / features.length) * 100;
   }
 
-  private static groupByGame(features: BehavioralFeature[]) {
-    // Helper nhóm dữ liệu
+  private static calculatePretendPlayScore(features: BehavioralFeature[]): number {
+    // Placeholder – sẽ cập nhật sau
+    return 0;
+  }
+
+  private static calculateGazeStability(features: BehavioralFeature[]): number {
+    if (features.length < 2) return 50;
+    const xVals = features.map(f => f.gazeX);
+    const yVals = features.map(f => f.gazeY);
+    const variance = (nums: number[]) => {
+      const mean = nums.reduce((a, b) => a + b, 0) / nums.length;
+      return nums.reduce((sq, n) => sq + Math.pow(n - mean, 2), 0) / nums.length;
+    };
+    const vx = variance(xVals);
+    const vy = variance(yVals);
+    const avgVariance = (vx + vy) / 2;
+    const stability = Math.max(0, 100 - avgVariance * 2000);
+    return Math.min(100, Math.round(stability));
+  }
+
+  private static calculateHandEyeCoordination(features: BehavioralFeature[]): number {
+    const handFrames = features.filter(f => (f.handLandmarks?.length || 0) > 0);
+    if (handFrames.length === 0) return 0;
+    return (handFrames.length / features.length) * 100;
+  }
+
+  private static calculateAuditoryResponseScore(features: BehavioralFeature[]): number {
+    const audioStimuli = features.filter(f => f.audioStimulus && f.audioStimulus !== 'none');
+    if (audioStimuli.length === 0) return 0;
+    let responses = 0;
+    for (const stim of audioStimuli) {
+      const window = features.filter(f => 
+        f.timestamp > stim.timestamp && f.timestamp <= stim.timestamp + 1000
+      );
+      if (window.some(f => f.isLookingAtTarget === true || f.attentionLevel > 0.6)) {
+        responses++;
+      }
+    }
+    return (responses / audioStimuli.length) * 100;
+  }
+
+  private static groupByGame(features: BehavioralFeature[]): Record<string, BehavioralFeature[]> {
     const groups: Record<string, BehavioralFeature[]> = {};
     features.forEach(f => {
-      const gId = f.gameId || 'unknown';
-      if (!groups[gId]) groups[gId] = [];
-      groups[gId].push(f);
+      const gameId = f.gameId || 'default';
+      if (!groups[gameId]) groups[gameId] = [];
+      groups[gameId].push(f);
     });
     return groups;
   }

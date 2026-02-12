@@ -4,6 +4,7 @@ import { InferenceResult, LongitudinalRecord } from '../types';
 interface DashboardProps {
   records: LongitudinalRecord[];
   latestAnalysis?: InferenceResult;
+  
 }
 
 // --- PHẦN 1: TỪ ĐIỂN DỊCH THUẬT ---

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { SubGameProps, BehavioralFeature } from '../../types';
 
 const G4_2_StorySequence: React.FC<SubGameProps> = ({ 
@@ -6,757 +6,362 @@ const G4_2_StorySequence: React.FC<SubGameProps> = ({
   onFeatureCapture, 
   timeElapsed,
 }) => {
-  // --- CSS NỘI BỘ ---
+  // --- CSS NÂNG CẤP ---
   const styles = `
     .story-game-container {
-      width: 100%;
-      height: 100%;
-      position: relative;
-      background: linear-gradient(135deg, #F472B6 0%, #DB2777 100%);
-      border-radius: 20px;
-      overflow: hidden;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px;
+      width: 100%; height: 100%; position: relative;
+      background: linear-gradient(135deg, #FDF2F8 0%, #FCE7F3 100%);
+      border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; align-items: center; padding: 20px;
     }
-
-    .story-timer {
-      position: absolute;
-      top: 20px;
-      right: 20px;
-      background: rgba(0, 0, 0, 0.7);
-      color: white;
-      padding: 10px 20px;
-      border-radius: 20px;
-      font-size: 16px;
-      font-weight: bold;
-      z-index: 100;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
     .story-title {
-      text-align: center;
-      color: white;
-      font-size: 32px;
-      font-weight: bold;
-      margin-bottom: 20px;
-      text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3);
-      background: rgba(0, 0, 0, 0.3);
-      padding: 10px 30px;
-      border-radius: 20px;
+      font-size: 28px; font-weight: bold; color: #BE185D; margin-bottom: 15px;
+      background: white; padding: 10px 30px; border-radius: 40px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);
     }
-
-    .story-theme {
-      background: rgba(255, 255, 255, 0.95);
-      padding: 15px 25px;
-      border-radius: 20px;
-      text-align: center;
-      font-size: 22px;
-      font-weight: bold;
-      color: #7C3AED;
-      margin: 10px 0;
-      width: 90%;
-      border: 4px solid #F472B6;
-    }
-
     .story-areas {
-      display: flex;
-      justify-content: space-between;
-      width: 95%;
-      height: 60%;
-      margin: 20px 0;
-      gap: 20px;
+      display: flex; gap: 30px; width: 100%; flex: 1; align-items: center; justify-content: center;
     }
+    .story-scenes-pool {
+      display: flex; flex-direction: column; gap: 15px; width: 250px;
+    }
+    .story-slots-area {
+      display: flex; gap: 20px;
+    }
+    .scene-card {
+      background: white; border-radius: 20px; padding: 15px; cursor: grab;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1); border: 4px solid white;
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      transition: all 0.2s; width: 180px;
+    }
+    .scene-card:active { cursor: grabbing; transform: scale(0.95); }
+    .scene-card.correct { border-color: #10B981; background: #ECFDF5; }
+    .scene-card.placed { opacity: 0.5; cursor: default; pointer-events: none; }
+    .scene-emoji { font-size: 60px; }
+    .scene-text { font-size: 16px; font-weight: bold; color: #4B5563; text-align: center; }
 
-    .story-source {
-      flex: 1;
-      background: rgba(255, 255, 255, 0.9);
-      border-radius: 20px;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-      overflow-y: auto;
-      border: 3px dashed #F472B6;
+    .slot {
+      width: 180px; height: 180px; border: 4px dashed #DB2777; border-radius: 20px;
+      display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.5);
+      transition: background 0.3s;
     }
-
-    .story-sequence {
-      flex: 1;
-      background: rgba(255, 255, 255, 0.9);
-      border-radius: 20px;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-      overflow-y: auto;
-      border: 3px solid #7C3AED;
+    .slot.drag-over { background: rgba(219, 39, 119, 0.1); }
+    
+    .mic-btn {
+      margin-top: 20px; padding: 15px 40px; border-radius: 40px; border: none;
+      background: #DB2777; color: white; font-size: 20px; font-weight: bold;
+      cursor: pointer; display: flex; align-items: center; gap: 10px;
+      animation: pulse 2s infinite;
     }
-
-    .story-scene {
-      background: white;
-      border-radius: 15px;
-      padding: 20px;
-      cursor: move;
-      user-select: none;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-      transition: all 0.3s ease;
-      display: flex;
-      align-items: center;
-      gap: 15px;
-      border: 2px solid transparent;
-    }
-
-    .story-scene:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-    }
-
-    .story-scene.dragging {
-      opacity: 0.5;
-      transform: scale(0.98);
-    }
-
-    .story-scene.placed {
-      background: #EDE9FE;
-      border-color: #7C3AED;
-    }
-
-    .story-scene.correct {
-      border-color: #10B981;
-      background: #D1FAE5;
-    }
-
-    .story-scene.incorrect {
-      border-color: #EF4444;
-      background: #FEE2E2;
-    }
-
-    .story-scene-emoji {
-      font-size: 36px;
-      min-width: 60px;
-      text-align: center;
-    }
-
-    .story-scene-text {
-      font-size: 18px;
-      color: #4B5563;
-      font-weight: 500;
-    }
-
-    .story-scene-number {
-      width: 30px;
-      height: 30px;
-      background: #7C3AED;
-      color: white;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      font-size: 16px;
-    }
-
-    .story-sequence-slot {
-      min-height: 100px;
-      border: 2px dashed #9CA3AF;
-      border-radius: 15px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #6B7280;
-      font-weight: bold;
-      font-size: 18px;
-      transition: all 0.3s ease;
-    }
-
-    .story-sequence-slot.highlight {
-      border-color: #7C3AED;
-      background: rgba(124, 58, 237, 0.1);
-    }
-
-    .story-instruction {
-      background: rgba(255, 255, 255, 0.95);
-      padding: 15px 30px;
-      border-radius: 20px;
-      text-align: center;
-      font-size: 20px;
-      font-weight: bold;
-      color: #4B5563;
-      margin: 10px 0;
-      width: 90%;
-    }
-
-    .story-feedback {
-      position: absolute;
-      bottom: 30px;
-      left: 0;
-      right: 0;
-      text-align: center;
-      font-size: 22px;
-      font-weight: bold;
-      color: white;
-      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-      padding: 15px;
-      background: rgba(0, 0, 0, 0.5);
-      border-radius: 15px;
-      margin: 0 40px;
-      z-index: 10;
-    }
-
-    .story-controls {
-      display: flex;
-      gap: 20px;
-      margin-top: 20px;
-    }
-
-    .story-control-btn {
-      background: white;
-      border: none;
-      padding: 12px 25px;
-      border-radius: 15px;
-      font-size: 18px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .story-control-btn:hover {
-      transform: translateY(-3px);
-    }
-
-    .story-control-btn.check {
-      background: #10B981;
-      color: white;
-    }
-
-    .story-control-btn.reset {
-      background: #EF4444;
-      color: white;
-    }
-
-    .story-progress {
-      width: 80%;
-      height: 8px;
-      background: rgba(255, 255, 255, 0.3);
-      border-radius: 10px;
-      overflow: hidden;
-      margin: 10px 0;
-    }
-
-    .story-progress-bar {
-      height: 100%;
-      background: linear-gradient(90deg, #FCD34D, #F59E0B);
-      border-radius: 10px;
-      transition: width 0.5s ease;
-    }
-
-    @media (max-width: 768px) {
-      .story-areas {
-        flex-direction: column;
-        height: auto;
-        max-height: 60vh;
-      }
-      
-      .story-title {
-        font-size: 24px;
-        padding: 8px 20px;
-      }
-      
-      .story-theme {
-        font-size: 18px;
-        padding: 12px 20px;
-      }
-      
-      .story-scene {
-        padding: 15px;
-      }
-      
-      .story-scene-emoji {
-        font-size: 28px;
-        min-width: 50px;
-      }
-      
-      .story-scene-text {
-        font-size: 16px;
-      }
-      
-      .story-instruction {
-        font-size: 16px;
-        padding: 12px 20px;
-      }
-      
-      .story-feedback {
-        font-size: 18px;
-        margin: 0 20px;
-        padding: 12px;
-      }
-    }
+    .mic-active { background: #10B981; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(219, 39, 119, 0.4); } 70% { box-shadow: 0 0 0 20px rgba(219, 39, 119, 0); } 100% { box-shadow: 0 0 0 0 rgba(219, 39, 119, 0); } }
   `;
 
-  // --- LOGIC ---
-  interface StoryScene {
-    id: number;
-    emoji: string;
-    text: string;
-    correctOrder: number;
-    placedOrder: number | null;
-  }
-
-  interface Story {
-    id: number;
-    title: string;
-    scenes: StoryScene[];
-  }
-
-  const GAME_DURATION = 300; // Tăng thời gian vì có nhiều câu chuyện
-  
-  const stories: Story[] = useMemo(() => [
+  // --- DỮ LIỆU CÂU CHUYỆN ---
+  const stories = useMemo(() => [
     {
-      id: 1,
-      title: "Chú Gấu Đi Tìm Mật Ong",
+      id: 1, title: "Rửa Tay Sạch Sẽ",
       scenes: [
-        { id: 1, emoji: '🐻', text: 'Gấu thức dậy đói bụng', correctOrder: 1, placedOrder: null },
-        { id: 2, emoji: '🍯', text: 'Gấu ngửi thấy mùi mật ong', correctOrder: 2, placedOrder: null },
-        { id: 3, emoji: '🌳', text: 'Gấu leo lên cây cao', correctOrder: 3, placedOrder: null },
-        { id: 4, emoji: '🐝', text: 'Gấu gặp đàn ong bảo vệ', correctOrder: 4, placedOrder: null },
-        { id: 5, emoji: '🏃', text: 'Gấu chạy về nhà với mật ong', correctOrder: 5, placedOrder: null }
+        { id: 1, emoji: '🧼', text: 'Xoa xà phòng', order: 1 },
+        { id: 2, emoji: '💧', text: 'Rửa dưới vòi nước', order: 2 },
+        { id: 3, emoji: '✨', text: 'Tay sạch thơm tho', order: 3 }
       ]
     },
     {
-      id: 2,
-      title: "Mèo Con Và Quả Bóng",
+      id: 2, title: "Bé Trồng Cây",
       scenes: [
-        { id: 6, emoji: '🎾', text: 'Mèo con thấy quả bóng lăn', correctOrder: 1, placedOrder: null },
-        { id: 7, emoji: '🐾', text: 'Mèo con chạy theo bóng', correctOrder: 2, placedOrder: null },
-        { id: 8, emoji: '🏃', text: 'Bóng lăn xuống đồi', correctOrder: 3, placedOrder: null },
-        { id: 9, emoji: '🌊', text: 'Bóng rơi xuống suối', correctOrder: 4, placedOrder: null },
-        { id: 10, emoji: '😿', text: 'Mèo con buồn về nhà', correctOrder: 5, placedOrder: null }
+        { id: 4, emoji: '🌱', text: 'Gieo hạt xuống đất', order: 1 },
+        { id: 5, emoji: '🚿', text: 'Tưới nước cho cây', order: 2 },
+        { id: 6, emoji: '🌳', text: 'Cây lớn thật cao', order: 3 }
       ]
     },
     {
-      id: 3,
-      title: "Chú Thỏ Và Củ Cà Rốt",
+      id: 3, title: "Chú Gấu Đi Dạo",
       scenes: [
-        { id: 11, emoji: '🐰', text: 'Thỏ con thấy củ cà rốt to', correctOrder: 1, placedOrder: null },
-        { id: 12, emoji: '🥕', text: 'Thỏ cố gắng nhổ cà rốt', correctOrder: 2, placedOrder: null },
-        { id: 13, emoji: '🤝', text: 'Bạn sóc đến giúp đỡ', correctOrder: 3, placedOrder: null },
-        { id: 14, emoji: '💪', text: 'Cùng nhau kéo mạnh', correctOrder: 4, placedOrder: null },
-        { id: 15, emoji: '🎉', text: 'Cà rốt được nhổ lên, cùng ăn', correctOrder: 5, placedOrder: null }
+        { id: 7, emoji: '🐻', text: 'Gấu thức dậy sớm', order: 1 },
+        { id: 8, emoji: '🌲', text: 'Đi bộ trong rừng', order: 2 },
+        { id: 9, emoji: '🍯', text: 'Tìm thấy tổ ong', order: 3 }
       ]
     },
     {
-      id: 4,
-      title: "Chim Non Học Bay",
+      id: 4, title: "Thỏ Con Học Nhảy",
       scenes: [
-        { id: 16, emoji: '🥚', text: 'Chim non nở từ quả trứng', correctOrder: 1, placedOrder: null },
-        { id: 17, emoji: '👀', text: 'Nhìn mẹ bay trên trời', correctOrder: 2, placedOrder: null },
-        { id: 18, emoji: '🪽', text: 'Tập vỗ cánh trong tổ', correctOrder: 3, placedOrder: null },
-        { id: 19, emoji: '🌳', text: 'Nhảy từ cành cây xuống', correctOrder: 4, placedOrder: null },
-        { id: 20, emoji: '🦅', text: 'Bay được những mét đầu tiên', correctOrder: 5, placedOrder: null }
+        { id: 10, emoji: '🐰', text: 'Khởi động đôi chân', order: 1 },
+        { id: 11, emoji: '🦘', text: 'Nhảy theo kangaroo', order: 2 },
+        { id: 12, emoji: '🎉', text: 'Nhảy cao vui sướng', order: 3 }
       ]
     },
     {
-      id: 5,
-      title: "Bạn Nhỏ Đi Siêu Thị",
+      id: 5, title: "Bé Đi Siêu Thị",
       scenes: [
-        { id: 21, emoji: '📝', text: 'Mẹ viết danh sách mua sắm', correctOrder: 1, placedOrder: null },
-        { id: 22, emoji: '🛒', text: 'Cùng mẹ đẩy xe hàng', correctOrder: 2, placedOrder: null },
-        { id: 23, emoji: '🥦', text: 'Chọn rau củ tươi ngon', correctOrder: 3, placedOrder: null },
-        { id: 24, emoji: '🍎', text: 'Lấy trái cây yêu thích', correctOrder: 4, placedOrder: null },
-        { id: 25, emoji: '💵', text: 'Mẹ thanh toán ở quầy', correctOrder: 5, placedOrder: null }
+        { id: 13, emoji: '🛒', text: 'Đẩy xe đi mua sắm', order: 1 },
+        { id: 14, emoji: '🥕', text: 'Chọn rau củ tươi', order: 2 },
+        { id: 15, emoji: '💰', text: 'Trả tiền tại quầy', order: 3 }
       ]
     },
     {
-      id: 6,
-      title: "Ngày Đầu Đi Học",
+      id: 6, title: "Xe Lửa Chạy Nhanh",
       scenes: [
-        { id: 26, emoji: '🎒', text: 'Chuẩn bị cặp sách mới', correctOrder: 1, placedOrder: null },
-        { id: 27, emoji: '👋', text: 'Chào tạm biệt bố mẹ', correctOrder: 2, placedOrder: null },
-        { id: 28, emoji: '👩‍🏫', text: 'Gặp cô giáo và bạn mới', correctOrder: 3, placedOrder: null },
-        { id: 29, emoji: '✏️', text: 'Học viết chữ đầu tiên', correctOrder: 4, placedOrder: null },
-        { id: 30, emoji: '😊', text: 'Vui vẻ kể chuyện về trường', correctOrder: 5, placedOrder: null }
+        { id: 16, emoji: '🚂', text: 'Xe lửa rời ga', order: 1 },
+        { id: 17, emoji: '🌉', text: 'Chạy qua cầu vồng', order: 2 },
+        { id: 18, emoji: '🏁', text: 'Về đích an toàn', order: 3 }
       ]
     },
     {
-      id: 7,
-      title: "Chuyến Cắm Trại",
+      id: 7, title: "Bé Tự Mặc Quần Áo",
       scenes: [
-        { id: 31, emoji: '🎪', text: 'Dựng lều trại trong rừng', correctOrder: 1, placedOrder: null },
-        { id: 32, emoji: '🔥', text: 'Nhóm lửa trại cùng nhau', correctOrder: 2, placedOrder: null },
-        { id: 33, emoji: '🌭', text: 'Nướng xúc xích trên lửa', correctOrder: 3, placedOrder: null },
-        { id: 34, emoji: '🎵', text: 'Hát hò quanh đống lửa', correctOrder: 4, placedOrder: null },
-        { id: 35, emoji: '⭐', text: 'Ngắm sao trời ban đêm', correctOrder: 5, placedOrder: null }
+        { id: 19, emoji: '👕', text: 'Mặc áo vào người', order: 1 },
+        { id: 20, emoji: '👖', text: 'Kéo quần lên cao', order: 2 },
+        { id: 21, emoji: '👟', text: 'Đi giày thật vừa', order: 3 }
       ]
     },
     {
-      id: 8,
-      title: "Giúp Đỡ Ông Bà",
+      id: 8, title: "Chim Non Tập Bay",
       scenes: [
-        { id: 36, emoji: '👴👵', text: 'Đến thăm ông bà', correctOrder: 1, placedOrder: null },
-        { id: 37, emoji: '🍂', text: 'Quét lá sân vườn', correctOrder: 2, placedOrder: null },
-        { id: 38, emoji: '💐', text: 'Tưới nước cho hoa', correctOrder: 3, placedOrder: null },
-        { id: 39, emoji: '🍪', text: 'Ông bà cho bánh ngọt', correctOrder: 4, placedOrder: null },
-        { id: 40, emoji: '❤️', text: 'Ôm tạm biệt ông bà', correctOrder: 5, placedOrder: null }
+        { id: 22, emoji: '🐣', text: 'Chim non ra tổ', order: 1 },
+        { id: 23, emoji: '🌬️', text: 'Đập cánh tập bay', order: 2 },
+        { id: 24, emoji: '🪽', text: 'Bay cao trên trời', order: 3 }
       ]
     },
     {
-      id: 9,
-      title: "Dọn Dẹp Phòng",
+      id: 9, title: "Bé Đánh Răng Sạch",
       scenes: [
-        { id: 41, emoji: '🧸', text: 'Nhìn thấy phòng bừa bộn', correctOrder: 1, placedOrder: null },
-        { id: 42, emoji: '📚', text: 'Xếp sách vở ngăn nắp', correctOrder: 2, placedOrder: null },
-        { id: 43, emoji: '🧹', text: 'Quét sạch bụi bẩn', correctOrder: 3, placedOrder: null },
-        { id: 44, emoji: '🛏️', text: 'Dọn giường gọn gàng', correctOrder: 4, placedOrder: null },
-        { id: 45, emoji: '✨', text: 'Phòng sạch sẽ sáng ngời', correctOrder: 5, placedOrder: null }
+        { id: 25, emoji: '🪥', text: 'Lấy bàn chải nhỏ', order: 1 },
+        { id: 26, emoji: '🦷', text: 'Chải răng tròn đều', order: 2 },
+        { id: 27, emoji: '😁', text: 'Nụ cười sáng ngời', order: 3 }
+      ]
+    },
+    {
+      id: 10, title: "Ông Mặt Trời Thức Dậy",
+      scenes: [
+        { id: 28, emoji: '🌙', text: 'Mặt trăng đi ngủ', order: 1 },
+        { id: 29, emoji: '🌅', text: 'Ông mặt trời dậy', order: 2 },
+        { id: 30, emoji: '☀️', text: 'Tỏa nắng ấm áp', order: 3 }
+      ]
+    },
+    {
+      id: 11, title: "Xây Nhà Bằng Gỗ",
+      scenes: [
+        { id: 31, emoji: '🪵', text: 'Chọn khúc gỗ to', order: 1 },
+        { id: 32, emoji: '🔨', text: 'Đóng đinh cẩn thận', order: 2 },
+        { id: 33, emoji: '🏠', text: 'Ngôi nhà xinh xắn', order: 3 }
+      ]
+    },
+    {
+      id: 12, title: "Chú Mèo Bắt Chuột",
+      scenes: [
+        { id: 34, emoji: '🐭', text: 'Chuột chạy nhanh', order: 1 },
+        { id: 35, emoji: '🐈', text: 'Mèo rình phía sau', order: 2 },
+        { id: 36, emoji: '🏆', text: 'Bắt được khoe mẹ', order: 3 }
+      ]
+    },
+    {
+      id: 13, title: "Bé Học Vẽ Tranh",
+      scenes: [
+        { id: 37, emoji: '🎨', text: 'Chọn màu yêu thích', order: 1 },
+        { id: 38, emoji: '🖌️', text: 'Vẽ hình tròn tròn', order: 2 },
+        { id: 39, emoji: '🖼️', text: 'Bức tranh hoàn thành', order: 3 }
+      ]
+    },
+    {
+      id: 14, title: "Thuyền Buồm Ra Khơi",
+      scenes: [
+        { id: 40, emoji: '⛵', text: 'Thuyền rời bến cảng', order: 1 },
+        { id: 41, emoji: '🌊', text: 'Vượt sóng đại dương', order: 2 },
+        { id: 42, emoji: '🐟', text: 'Đánh bắt nhiều cá', order: 3 }
+      ]
+    },
+    {
+      id: 15, title: "Chong Chóng Quay Gió",
+      scenes: [
+        { id: 43, emoji: '🌬️', text: 'Gió thổi nhẹ nhàng', order: 1 },
+        { id: 44, emoji: '🎐', text: 'Chong chóng xoay tròn', order: 2 },
+        { id: 45, emoji: '🌈', text: 'Màu sắc lung linh', order: 3 }
+      ]
+    },
+    {
+      id: 16, title: "Bé Tự Dọn Đồ Chơi",
+      scenes: [
+        { id: 46, emoji: '🧸', text: 'Thu gom đồ chơi', order: 1 },
+        { id: 47, emoji: '📦', text: 'Xếp vào hộp gọn', order: 2 },
+        { id: 48, emoji: '🧹', text: 'Phòng sạch ngăn nắp', order: 3 }
+      ]
+    },
+    {
+      id: 17, title: "Bướm Xinh Bay Lượn",
+      scenes: [
+        { id: 49, emoji: '🐛', text: 'Sâu nhả tơ vàng', order: 1 },
+        { id: 50, emoji: '🦋', text: 'Hóa thành bướm xinh', order: 2 },
+        { id: 51, emoji: '🌸', text: 'Bay lượn vườn hoa', order: 3 }
+      ]
+    },
+    {
+      id: 18, title: "Bé Đi Ngủ Đúng Giờ",
+      scenes: [
+        { id: 52, emoji: '🛁', text: 'Tắm rửa sạch sẽ', order: 1 },
+        { id: 53, emoji: '📖', text: 'Nghe kể chuyện hay', order: 2 },
+        { id: 54, emoji: '🌙', text: 'Chìm vào giấc mơ', order: 3 }
+      ]
+    },
+    {
+      id: 19, title: "Máy Bay Cất Cánh",
+      scenes: [
+        { id: 55, emoji: '🛫', text: 'Máy bay chạy đà', order: 1 },
+        { id: 56, emoji: '✈️', text: 'Bay lên bầu trời', order: 2 },
+        { id: 57, emoji: '☁️', text: 'Lượn giữa mây trắng', order: 3 }
+      ]
+    },
+    {
+      id: 20, title: "Bé Chơi Xếp Hình",
+      scenes: [
+        { id: 58, emoji: '🧩', text: 'Chọn miếng ghép đúng', order: 1 },
+        { id: 59, emoji: '🏰', text: 'Xếp thành lâu đài', order: 2 },
+        { id: 60, emoji: '👑', text: 'Công chúa tươi cười', order: 3 }
+      ]
+    },
+    {
+      id: 21, title: "Voi Con Tắm Sông",
+      scenes: [
+        { id: 61, emoji: '🐘', text: 'Voi xuống dòng sông', order: 1 },
+        { id: 62, emoji: '💦', text: 'Vòi phun nước mát', order: 2 },
+        { id: 63, emoji: '🛁', text: 'Sạch sẽ thơm tho', order: 3 }
+      ]
+    },
+    {
+      id: 22, title: "Bé Nhận Quà Sinh Nhật",
+      scenes: [
+        { id: 64, emoji: '🎂', text: 'Bánh sinh nhật đẹp', order: 1 },
+        { id: 65, emoji: '🎁', text: 'Mở quà bất ngờ', order: 2 },
+        { id: 66, emoji: '🤗', text: 'Ôm ba mẹ vui', order: 3 }
       ]
     }
   ], []);
 
-  const [currentStory, setCurrentStory] = useState<Story>(stories[0]);
-  const [scenes, setScenes] = useState<StoryScene[]>([]);
-  const [sequence, setSequence] = useState<(StoryScene | null)[]>([null, null, null, null, null]);
-  const [draggingScene, setDraggingScene] = useState<StoryScene | null>(null);
-  const [feedback, setFeedback] = useState('Kéo các cảnh vào đúng thứ tự câu chuyện! 📖');
-  const [score, setScore] = useState(0);
+  const [currentStoryIdx, setCurrentStoryIdx] = useState(0);
+  const [sequence, setSequence] = useState<(any | null)[]>([null, null, null]);
+  const [isRecording, setIsRecording] = useState(false);
   const [completed, setCompleted] = useState(false);
-  const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
-  const [storiesCompleted, setStoriesCompleted] = useState<number[]>([]);
 
-  // Khởi tạo scenes
-  useEffect(() => {
-    const shuffledScenes = [...currentStory.scenes].sort(() => Math.random() - 0.5);
-    setScenes(shuffledScenes);
-    setSequence(Array(currentStory.scenes.length).fill(null));
-    setCompleted(false);
-    setFeedback(`Sắp xếp câu chuyện: ${currentStory.title} 📚`);
-  }, [currentStory]);
+  const currentStory = stories[currentStoryIdx];
+  const shuffledScenes = useMemo(() => [...currentStory.scenes].sort(() => Math.random() - 0.5), [currentStoryIdx]);
 
-  const handleDragStart = (scene: StoryScene) => {
-    setDraggingScene(scene);
-  };
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    const slot = document.querySelector(`.sequence-slot-${index}`);
-    slot?.classList.add('highlight');
-  };
-
-  const handleDragLeave = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    const slot = document.querySelector(`.sequence-slot-${index}`);
-    slot?.classList.remove('highlight');
-  };
-
-  const handleDrop = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    const slot = document.querySelector(`.sequence-slot-${index}`);
-    slot?.classList.remove('highlight');
-    
-    if (!draggingScene) return;
-    
-    // Kiểm tra xem scene đã được đặt chưa
-    if (draggingScene.placedOrder !== null) {
-      const oldSequence = [...sequence];
-      oldSequence[draggingScene.placedOrder - 1] = null;
-      setSequence(oldSequence);
+  const speak = (text: string) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const msg = new SpeechSynthesisUtterance(text);
+      msg.lang = 'vi-VN';
+      msg.rate = 0.9;
+      window.speechSynthesis.speak(msg);
     }
-    
-    // Đặt scene vào vị trí mới
+  };
+
+  const handleDropLogic = (sceneId: number, slotIdx: number) => {
+    const scene = currentStory.scenes.find(s => s.id === sceneId);
+    if (!scene) return;
+
     const newSequence = [...sequence];
-    newSequence[index] = draggingScene;
+    newSequence[slotIdx] = scene;
     setSequence(newSequence);
-    
-    // Cập nhật placedOrder cho scene
-    const updatedScenes = scenes.map(scene =>
-      scene.id === draggingScene.id 
-        ? { ...scene, placedOrder: index + 1 } 
-        : scene
-    );
-    setScenes(updatedScenes);
-    
-    setFeedback(`Đặt "${draggingScene.text}" vào vị trí ${index + 1}`);
-  };
 
-  const checkSequence = () => {
-    let correctCount = 0;
-    
-    sequence.forEach((scene, index) => {
-      if (scene && scene.correctOrder === index + 1) {
-        correctCount++;
+    // Kiểm tra hoàn thành khi đủ 3 ô
+    if (newSequence.every(s => s !== null)) {
+      const isCorrect = newSequence.every((s, i) => s.order === i + 1);
+      if (isCorrect) {
+        setCompleted(true);
+        speak("Giỏi quá! Bây giờ con hãy nhấn nút Mic và kể lại câu chuyện cho tớ nghe nhé!");
+      } else {
+        speak("Hình như sai thứ tự rồi, con thử lại xem.");
       }
-    });
-    
-    if (correctCount === currentStory.scenes.length) {
-      setCompleted(true);
-      const newScore = score + 10;
-      setScore(newScore);
-      
-      // Đánh dấu câu chuyện đã hoàn thành
-      if (!storiesCompleted.includes(currentStory.id)) {
-        setStoriesCompleted(prev => [...prev, currentStory.id]);
-      }
-      
-      setFeedback(`Hoàn hảo! Câu chuyện "${currentStory.title}" đã được sắp xếp đúng! 🎉📖 (+10 điểm)`);
-      
-      // Tự động chuyển câu chuyện tiếp theo sau 2 giây
-      setTimeout(() => {
-        if (currentStoryIndex < stories.length - 1) {
-          nextStory();
-        }
-      }, 2000);
-    } else {
-      setFeedback(`Có ${correctCount}/5 cảnh đúng. Hãy thử lại! 💪`);
     }
   };
 
-  const resetStory = () => {
-    const shuffledScenes = [...currentStory.scenes].sort(() => Math.random() - 0.5);
-    setScenes(shuffledScenes);
-    setSequence(Array(currentStory.scenes.length).fill(null));
-    setFeedback('Hãy sắp xếp lại câu chuyện! 🔄');
-    setCompleted(false);
-  };
-
-  const nextStory = () => {
-    if (currentStoryIndex < stories.length - 1) {
-      const nextIndex = currentStoryIndex + 1;
-      setCurrentStoryIndex(nextIndex);
-      setCurrentStory(stories[nextIndex]);
-      setFeedback(`Chuyển sang: ${stories[nextIndex].title} ⏭️`);
-    } else {
-      setFeedback('Chúc mừng! Bạn đã hoàn thành tất cả câu chuyện! 🏆🎉');
-    }
-  };
-
-  const prevStory = () => {
-    if (currentStoryIndex > 0) {
-      const prevIndex = currentStoryIndex - 1;
-      setCurrentStoryIndex(prevIndex);
-      setCurrentStory(stories[prevIndex]);
-    }
-  };
-
+  // --- AI TRACKING ---
   useEffect(() => {
     const recordLoop = setInterval(() => {
       const aiData = latestAIResult.current?.features;
-      
-      // Xác định affect
-      let affect: 'positive' | 'neutral' | 'negative' | 'surprised' = 'neutral';
-      if (completed) affect = 'positive';
-      if (feedback.includes('Hãy thử lại')) affect = 'negative';
-      if (draggingScene) affect = 'surprised';
-      if (feedback.includes('Chúc mừng')) affect = 'positive';
-      
-      // Tập trung vào khu vực sequence
-      const feature: BehavioralFeature = {
+      onFeatureCapture({
         timestamp: Date.now(),
         gazeX: aiData?.gazeX ?? 0.5,
         gazeY: aiData?.gazeY ?? 0.5,
-        targetX: 70,
-        targetY: 50,
-        targetSize: 200,
-        audioStimulus: null,
-        isLookingAtTarget: false,
+        isSpeaking: aiData?.isSpeaking ?? false,
+        isStoryTelling: isRecording && (aiData?.isSpeaking ?? false),
+        completedSequence: completed,
         attentionLevel: aiData?.avgAttention ?? 0.5,
-        smileIntensity: aiData?.avgSmile ?? 0,
-        frownIntensity: 0.1,
-        affect: affect,
-        poseConfidence: aiData?.faceDetectionConfidence ?? 0,
-        faceConfidence: aiData?.faceDetectionConfidence ?? 0
-      };
-      onFeatureCapture(feature);
-    }, 100);
-
-    return () => { 
-      clearInterval(recordLoop); 
-    };
-  }, [completed, feedback, draggingScene, onFeatureCapture, latestAIResult]);
-
-  const progressPercentage = ((currentStoryIndex + 1) / stories.length) * 100;
-
-  // Kiểm tra xem đã hoàn thành tất cả câu chuyện chưa
-  const allStoriesCompleted = storiesCompleted.length === stories.length;
+        affect: completed ? 'positive' : 'neutral'
+      } as any);
+    }, 200);
+    return () => clearInterval(recordLoop);
+  }, [onFeatureCapture, latestAIResult, isRecording, completed]);
 
   return (
     <div className="story-game-container">
       <style>{styles}</style>
+      <div className="story-title">{currentStory.title}</div>
 
-      <div className="story-timer">
-        ⏱️ {timeElapsed}s / {GAME_DURATION}s
-      </div>
-      
-      <div className="story-title">
-        📚 Sắp Xếp Câu Chuyện
-      </div>
-
-      <div className="story-theme">
-        {currentStory.title} 🎬
-        <div style={{ fontSize: '16px', color: '#6B7280', marginTop: '5px' }}>
-          Câu chuyện {currentStoryIndex + 1}/{stories.length} | 
-          Hoàn thành: {storiesCompleted.length}/{stories.length} ✅
-        </div>
-      </div>
-
-      <div className="story-instruction">
-        {allStoriesCompleted 
-          ? '🎉 Chúc mừng! Bạn đã hoàn thành tất cả câu chuyện!'
-          : 'Kéo các cảnh bên trái vào đúng thứ tự câu chuyện bên phải!'
-        }
-      </div>
-
-      {!allStoriesCompleted ? (
-        <>
-          <div className="story-areas">
-            <div className="story-source">
-              {scenes.map(scene => (
-                <div
-                  key={scene.id}
-                  className={`story-scene ${scene.placedOrder !== null ? 'placed' : ''}`}
-                  draggable={!completed}
-                  onDragStart={() => handleDragStart(scene)}
-                >
-                  <div className="story-scene-emoji">{scene.emoji}</div>
-                  <div className="story-scene-text">{scene.text}</div>
-                  {scene.placedOrder && (
-                    <div className="story-scene-number">{scene.placedOrder}</div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div className="story-sequence">
-              {sequence.map((scene, index) => (
-                <div
-                  key={index}
-                  className={`story-sequence-slot sequence-slot-${index} ${
-                    scene ? 'filled' : ''
-                  }`}
-                  onDragOver={(e) => handleDragOver(e, index)}
-                  onDragLeave={(e) => handleDragLeave(e, index)}
-                  onDrop={(e) => handleDrop(e, index)}
-                >
-                  {scene ? (
-                    <div className={`story-scene ${
-                      completed && scene.correctOrder === index + 1 ? 'correct' : ''
-                    }`}>
-                      <div className="story-scene-emoji">{scene.emoji}</div>
-                      <div className="story-scene-text">{scene.text}</div>
-                      <div className="story-scene-number">{index + 1}</div>
-                    </div>
-                  ) : (
-                    <span>Vị trí {index + 1} ➡️</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="story-controls">
-            <button 
-              className="story-control-btn" 
-              onClick={prevStory}
-              disabled={currentStoryIndex === 0}
-              style={{ 
-                background: currentStoryIndex === 0 ? '#CCC' : '#8B5CF6', 
-                color: 'white',
-                opacity: currentStoryIndex === 0 ? 0.6 : 1
-              }}
-            >
-              <span>⏮️</span> Câu chuyện trước
-            </button>
-            
-            <button 
-              className="story-control-btn reset" 
-              onClick={resetStory}
-            >
-              <span>🔄</span> Làm lại
-            </button>
-            
-            <button 
-              className="story-control-btn check" 
-              onClick={checkSequence}
-              disabled={completed}
-            >
-              <span>✅</span> Kiểm tra
-            </button>
-            
-            <button 
-              className="story-control-btn" 
-              onClick={nextStory}
-              disabled={currentStoryIndex === stories.length - 1}
-              style={{ 
-                background: currentStoryIndex === stories.length - 1 ? '#CCC' : '#10B981', 
-                color: 'white',
-                opacity: currentStoryIndex === stories.length - 1 ? 0.6 : 1
-              }}
-            >
-              <span>⏭️</span> Câu chuyện tiếp
-            </button>
-          </div>
-
-          <div className="story-progress">
+      <div className="story-areas">
+        <div className="story-scenes-pool">
+          {shuffledScenes.map(scene => (
             <div 
-              className="story-progress-bar" 
-              style={{ width: `${progressPercentage}%` }}
-            />
-          </div>
-        </>
-      ) : (
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.95)',
-          padding: '40px',
-          borderRadius: '20px',
-          textAlign: 'center',
-          fontSize: '24px',
-          fontWeight: 'bold',
-          color: '#7C3AED',
-          marginTop: '20px',
-          width: '90%'
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '20px' }}>🏆🎉</div>
-          <div>Chúc mừng bạn đã hoàn thành tất cả 9 câu chuyện!</div>
-          <div style={{ fontSize: '20px', color: '#6B7280', marginTop: '10px' }}>
-            Điểm số: {score} | Hoàn thành: {storiesCompleted.length}/{stories.length}
-          </div>
-          <button 
-            onClick={() => {
-              setCurrentStoryIndex(0);
-              setCurrentStory(stories[0]);
-              setStoriesCompleted([]);
-              setScore(0);
-            }}
-            style={{
-              marginTop: '30px',
-              background: '#7C3AED',
-              color: 'white',
-              border: 'none',
-              padding: '15px 30px',
-              borderRadius: '15px',
-              fontSize: '18px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              margin: '30px auto 0'
-            }}
-          >
-            <span>🔄</span> Chơi lại từ đầu
-          </button>
+              key={scene.id} 
+              className={`scene-card ${sequence.some(s => s?.id === scene.id) ? 'placed' : ''}`}
+              draggable={!completed && !sequence.some(s => s?.id === scene.id)}
+              onDragStart={(e) => {
+                e.dataTransfer.setData("text/plain", scene.id.toString());
+              }}
+            >
+              <div className="scene-emoji">{scene.emoji}</div>
+              <div className="scene-text">{scene.text}</div>
+            </div>
+          ))}
         </div>
+
+        <div className="story-slots-area">
+          {sequence.map((item, idx) => (
+            <div 
+              key={idx} 
+              className="slot"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const idStr = e.dataTransfer.getData("text/plain");
+                if (idStr) {
+                  handleDropLogic(parseInt(idStr), idx);
+                }
+              }}
+            >
+              {item ? (
+                <div className={`scene-card ${completed ? 'correct' : ''}`}>
+                  <div className="scene-emoji">{item.emoji}</div>
+                  <div className="scene-text">{item.text}</div>
+                </div>
+              ) : <span>{idx + 1}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {completed && (
+        <button 
+          className={`mic-btn ${isRecording ? 'mic-active' : ''}`}
+          onClick={() => {
+            setIsRecording(!isRecording);
+            if (!isRecording) speak("Tớ đang nghe đây, con kể đi!");
+          }}
+        >
+          {isRecording ? "🔴 Tớ đang nghe..." : "🎤 Nhấn để kể chuyện"}
+        </button>
       )}
 
-      <div className="story-feedback">
-        {feedback} | Điểm: {score} ✨
-      </div>
+      {completed && !isRecording && (
+        <button 
+          style={{marginTop: '15px', background: 'none', border: 'none', color: '#DB2777', cursor: 'pointer', textDecoration: 'underline', fontSize: '18px'}}
+          onClick={() => {
+            setSequence([null, null, null]);
+            setCompleted(false);
+            setCurrentStoryIdx((prev) => (prev + 1) % stories.length);
+          }}
+        >
+          Sang chuyện tiếp theo ⏭️
+        </button>
+      )}  
     </div>
   );
 };

@@ -135,21 +135,19 @@ const G1_4_Peekaboo: React.FC<SubGameProps> = ({
         const nextId = [1, 2, 3].filter(id => id !== targetBushId)[Math.floor(Math.random() * 2)];
         setTargetBushId(nextId);
         setGameState('SHAKING');
-        
-        // Âm thanh xào xạc khi bụi cây rung
         playSound(150, 0.2);
 
         timer = setTimeout(() => {
           setGameState('PEEKABOO');
           setBearVisible(true);
-          
-          // Âm thanh "Ú ÒA" (Tần số cao hơn để tạo sự bất ngờ)
           playSound(600, 0.4);
           
           const pos = bushes.find(b => b.id === nextId);
           if (pos) lastBearPosition.current = { x: pos.x, y: pos.y };
-
-          timer = setTimeout(loop, 4000); // Đợi lâu hơn một chút vì gấu hiện ra chậm
+          timer = setTimeout(() => {
+            setBearVisible(false);
+            timer = setTimeout(loop, 10000);
+          }, 10000);
         }, 1500);
       }, 2000);
     };
