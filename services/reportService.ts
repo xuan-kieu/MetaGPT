@@ -1,4 +1,3 @@
-// services/ReportService.ts
 import {
   FullAssessmentResult,
   ScoreDetail,
@@ -8,7 +7,7 @@ import {
   ClinicalReport,
   ReportDomainAnalysis,
   Emotion,
-} from '../types'; // Đảm bảo import đúng từ types.ts
+} from '../types';
 
 // -------------------------------------------------------------
 // 1. INTERFACE CHO DỮ LIỆU DASHBOARD
@@ -45,7 +44,7 @@ export interface ChildProfileInfo {
   completedGames: number;
   totalGames: number;
   gender?: 'male' | 'female' | 'other';
-  birthDate?: string; // Thêm để tính tuổi chính xác
+  birthDate?: string;
 }
 
 // -------------------------------------------------------------
@@ -156,7 +155,7 @@ export class ReportService {
         };
       })
       .filter((item): item is NonNullable<typeof item> => item !== null)
-      .sort((a, b) => a.percentile - b.percentile); // Sắp xếp theo percentile tăng dần
+      .sort((a, b) => a.percentile - b.percentile);
 
     // 3. Tổng quan
     const summary = {
@@ -203,7 +202,6 @@ export class ReportService {
 
   // ==================== CÁC HÀM HỖ TRỢ ====================
 
-  // --- Xây dựng phân tích từng lĩnh vực cho JSON report ---
   private static buildDomainAnalysis(
     domainName: string,
     domain: { score: number; skills: Partial<Record<SkillType, ScoreDetail>> },
@@ -225,19 +223,17 @@ export class ReportService {
       })
       .filter((item): item is NonNullable<typeof item> => item !== null);
 
-    // Tính tuổi tương đương đơn giản: dựa trên điểm trung bình domain
     const ageEquivalent = this.estimateAgeEquivalent(domain.score);
 
     return {
       domain: domainName,
       score: Math.round(domain.score),
-      percentile: this.calculateDomainPercentile(domain.score), // ước lượng
+      percentile: this.calculateDomainPercentile(domain.score),
       age_equivalent: ageEquivalent,
       indicators,
     };
   }
 
-  // --- Ước tính tuổi tương đương (tạm) ---
   private static estimateAgeEquivalent(score: number): string {
     if (score >= 90) return '> 36 tháng';
     if (score >= 70) return '30-36 tháng';
@@ -246,17 +242,13 @@ export class ReportService {
     return '< 18 tháng';
   }
 
-  // --- Percentile ước lượng cho domain (có thể cải thiện sau) ---
   private static calculateDomainPercentile(score: number): number {
-    // Giả lập: phân phối chuẩn với mean=50, std=20
     const z = (score - 50) / 20;
     const p = this.normalCdf(z);
     return Math.round(p * 100);
   }
 
-  // --- Hàm CDF chuẩn (thay thế jStat nếu chưa có) ---
   private static normalCdf(z: number): number {
-    // Xấp xỉ bằng công thức Abramowitz & Stegun
     const t = 1 / (1 + 0.2316419 * Math.abs(z));
     const d = 0.3989423 * Math.exp((-z * z) / 2);
     let p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
@@ -264,7 +256,6 @@ export class ReportService {
     return p;
   }
 
-  // --- Trích xuất điểm mạnh / điểm yếu từ kết quả ---
   private static extractStrengthsAndConcerns(
     result: FullAssessmentResult
   ): { strengths: string[]; concerns: string[] } {
@@ -287,27 +278,23 @@ export class ReportService {
       }
     });
 
-    // Nếu không có điểm mạnh/điểm yếu, thêm mặc định
     if (strengths.length === 0) strengths.push('Chưa ghi nhận điểm mạnh nổi bật');
     if (concerns.length === 0) concerns.push('Không phát hiện khó khăn rõ rệt');
 
     return { strengths, concerns };
   }
 
-  // --- Suy luận mẫu hành vi từ kết quả (cho JSON) ---
   private static inferBehavioralPatterns(result: FullAssessmentResult): {
     attention_pattern: string;
     social_engagement: string;
     sensory_profile: string;
     gaze_stability_note?: string;
   } {
-    // Lấy gaze stability nếu có
     const gazeSkill = result.domains.core.skills['gaze_stability'];
     const gazeNote = gazeSkill
       ? `Độ ổn định ánh mắt: ${Math.round(gazeSkill.raw)}% (${gazeSkill.classification.level})`
       : undefined;
 
-    // Dựa vào risk level để mô tả
     let attention = '';
     let social = '';
     let sensory = '';
@@ -334,7 +321,6 @@ export class ReportService {
     };
   }
 
-  // --- Tạo khuyến nghị chi tiết dựa trên điểm yếu (cho JSON) ---
   private static generateDetailedRecommendations(
     result: FullAssessmentResult,
     concerns: string[]
@@ -350,7 +336,6 @@ export class ReportService {
     const actions: string[] = [];
     const resources: Array<{ type: string; name: string; contact?: string }> = [];
 
-    // Khuyến nghị chung theo mức độ
     if (priority === 'HIGH') {
       actions.push('Đưa trẻ đi khám chuyên khoa tâm lý / thần kinh nhi ngay lập tức');
       actions.push('Can thiệp sớm với chương trình cá nhân hóa');
@@ -366,14 +351,12 @@ export class ReportService {
       actions.push('Tiếp tục theo dõi và khuyến khích phát triển kỹ năng');
     }
 
-    // Khuyến nghị cụ thể dựa trên các kỹ năng yếu
     const weakSkills = this.getWeakSkills(result);
     weakSkills.forEach(({ skill, name }) => {
       const rec = this.getInterventionForSkill(skill);
       if (rec) actions.push(rec);
     });
 
-    // Duy nhất actions
     const uniqueActions = [...new Set(actions)];
 
     return {
@@ -383,7 +366,6 @@ export class ReportService {
     };
   }
 
-  // --- Phiên bản text của khuyến nghị chi tiết ---
   public static generateDetailedRecommendationsText(
     result: FullAssessmentResult
   ): string {
@@ -408,7 +390,6 @@ export class ReportService {
       text += '   ✅ KHÔNG PHÁT HIỆN KỸ NĂNG YẾU ĐẶC THÙ\n';
     }
 
-    // Khuyến nghị chung
     text += '\n   📌 HOẠT ĐỘNG GỢI Ý:\n';
     if (result.riskLevel === 'LOW') {
       text += '      • Duy trì các trò chơi vận động và tương tác hàng ngày.\n';
@@ -420,7 +401,6 @@ export class ReportService {
     return text;
   }
 
-  // --- Lấy danh sách các kỹ năng yếu (percentile < 15) ---
   private static getWeakSkills(
     result: FullAssessmentResult
   ): { skill: SkillType; name: string }[] {
@@ -443,7 +423,6 @@ export class ReportService {
     return weak;
   }
 
-  // --- Gợi ý can thiệp cho từng kỹ năng cụ thể ---
   private static getInterventionForSkill(skill: SkillType): string | null {
     const map: Partial<Record<SkillType, string>> = {
       joint_attention: 'Chỉ tay và gọi tên đồ vật, chơi trò "nhìn theo tay chỉ".',
@@ -461,7 +440,6 @@ export class ReportService {
   }
 
   private static getInterventionForSkillShort(skillName: string): string {
-    // Phiên bản ngắn gọn cho text report
     const map: Record<string, string> = {
       'Chú ý chia sẻ': 'Tập chỉ tay và nhìn theo',
       'Bắt chước': 'Làm mẫu và khuyến khích trẻ làm theo',
@@ -477,7 +455,6 @@ export class ReportService {
     return map[skillName] || 'Tăng cường tương tác và khen thưởng';
   }
 
-  // --- Format một domain cho text report ---
   private static formatDomainBlock(
     title: string,
     domain: { score: number; skills: Partial<Record<SkillType, ScoreDetail>> }
@@ -492,7 +469,6 @@ export class ReportService {
     return block;
   }
 
-  // --- Các hàm helper cũ (giữ lại) ---
   private static translateSkillName(skillId: SkillType): string {
     const map: Record<SkillType, string> = {
       joint_attention: 'Chú ý chia sẻ',

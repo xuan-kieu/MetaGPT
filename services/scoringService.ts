@@ -1,4 +1,3 @@
-// services/scoringService.ts
 import { jStat } from 'jstat';
 
 // ==================== 1. ĐỊNH NGHĨA KIỂU ====================

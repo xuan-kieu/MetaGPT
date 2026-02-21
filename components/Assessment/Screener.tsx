@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import * as db from '../../services/dbService';
 import '../../styles.css';
 
 interface Question {
@@ -121,7 +122,6 @@ const Screener: React.FC<ScreenerProps> = ({ onComplete }) => {
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
-  const [loading] = useState(false);      // Không cần loading vì questions cố định
   const [timeRemaining, setTimeRemaining] = useState(300); // 5 phút
   const [assessmentCompleted, setAssessmentCompleted] = useState(false);
   const [score, setScore] = useState(0);
@@ -150,10 +150,7 @@ const Screener: React.FC<ScreenerProps> = ({ onComplete }) => {
   };
 
   const handleAnswer = (questionId: number, answerValue: number) => {
-    setAnswers(prev => ({
-      ...prev,
-      [questionId]: answerValue
-    }));
+    setAnswers(prev => ({ ...prev, [questionId]: answerValue }));
   };
 
   // ----- TÍNH ĐIỂM CHUẨN M‑CHAT‑R/F -----
@@ -190,65 +187,54 @@ const Screener: React.FC<ScreenerProps> = ({ onComplete }) => {
   };
 
   const saveAssessmentResult = (finalScore: number, priority: string) => {
+    // Lấy thông tin user và child từ localStorage (do App đã lưu)
+    const storedUserId = localStorage.getItem('neuropath_user_id');
     const childData = localStorage.getItem('current_child');
-    const parentData = localStorage.getItem('parent_user');
-    const neuropathUser = localStorage.getItem('neuropath_user');
 
-    if (!childData) {
-      console.error('Missing child data');
+    if (!storedUserId || !childData) {
+      console.error('Missing user or child data');
       return;
     }
 
     const child = JSON.parse(childData);
-    const parent = parentData ? JSON.parse(parentData) : null;
-    const user = neuropathUser ? JSON.parse(neuropathUser) : null;
+    const startedById = storedUserId;
 
-    const answeredCount = Object.keys(answers).length;
-
-    const assessmentResult = {
-      id: `assessment_${Date.now()}`,
-      childId: child.id,
-      parentId: parent?.id || user?.id,
-      date: new Date().toISOString(),
+    // Chuẩn bị dữ liệu adaptive_flow (lưu answers, score, priority)
+    const adaptiveFlow = {
+      answers,
       score: finalScore,
-      priorityLevel: priority,
+      priority,
       totalQuestions: questions.length,
-      answeredQuestions: answeredCount,
-      answers: answers,
-      questions: questions.map(q => ({
-        id: q.id,
-        text: q.text,
-        answer: answers[q.id] ?? null
-      })),
-      timeSpent: 300 - timeRemaining
+      answeredCount: Object.keys(answers).length,
+      timeSpent: 300 - timeRemaining,
     };
 
-    // Lưu kết quả
-    const existingResults = localStorage.getItem('assessment_results');
-    let results = existingResults ? JSON.parse(existingResults) : [];
-    results.push(assessmentResult);
-    localStorage.setItem('assessment_results', JSON.stringify(results));
+    // Tạo assessment trong DB với status 'scheduled'
+    const assessment = db.createAssessment({
+      child_id: child.id,
+      started_by: startedById,
+      started_at: new Date().toISOString(),
+      completed_at: null,
+      status: 'scheduled',
+      adaptive_flow: adaptiveFlow,
+      device_info: null,
+      environment_notes: null,
+      parent_assisted: false,
+      overall_risk_score: null,
+      risk_level: null,
+      developmental_age_estimate: null,
+      report_json: null,
+    });
 
-    localStorage.setItem(`screener_${child.id}`, JSON.stringify(assessmentResult));
+    // Lưu assessment id vào localStorage để App sử dụng sau
+    localStorage.setItem('current_assessment_id', assessment.id);
 
-    // Cập nhật hồ sơ trẻ
-    const existingChildren = localStorage.getItem('children_profiles');
-    if (existingChildren) {
-      let children = JSON.parse(existingChildren);
-      const childIndex = children.findIndex((c: any) => c.id === child.id);
-      if (childIndex !== -1) {
-        children[childIndex].lastAssessment = {
-          date: assessmentResult.date,
-          score: assessmentResult.score,
-          priority: assessmentResult.priorityLevel
-        };
-        children[childIndex].screenerCompleted = true;
-        localStorage.setItem('children_profiles', JSON.stringify(children));
-      }
-    }
-
+    // Gọi callback với kết quả (có thể trả về assessment)
     if (onComplete) {
-      onComplete(assessmentResult);
+      onComplete({
+        ...adaptiveFlow,
+        assessmentId: assessment.id,
+      });
     }
   };
 
@@ -304,17 +290,6 @@ const Screener: React.FC<ScreenerProps> = ({ onComplete }) => {
   };
 
   // ---------- RENDER ----------
-  if (loading) {
-    return (
-      <div className="screener-container">
-        <div className="loading-spinner">
-          <div className="spinner"></div>
-          <p>Đang tải câu hỏi...</p>
-        </div>
-      </div>
-    );
-  }
-
   if (assessmentCompleted) {
     return (
       <div className="assessment-result-container">
@@ -365,7 +340,7 @@ const Screener: React.FC<ScreenerProps> = ({ onComplete }) => {
             <button
               className="detail-button"
               onClick={() => {
-                alert('Chi tiết câu trả lời đã được lưu. Bạn có thể xem trong hồ sơ trẻ.');
+                alert('Chi tiết câu trả lời đã được lưu trong cơ sở dữ liệu.');
               }}
             >
               Xem chi tiết câu trả lời

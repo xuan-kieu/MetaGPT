@@ -1,45 +1,83 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { InferenceResult, LongitudinalRecord } from '../types';
+import * as db from '../services/dbService'; // Điều chỉnh đường dẫn nếu cần (có thể là '../dbService')
 
 interface DashboardProps {
-  records: LongitudinalRecord[];
+  childId?: string;               // Nếu có, tự động fetch dữ liệu từ DB
+  records?: LongitudinalRecord[];  // Dữ liệu truyền từ ngoài (ưu tiên nếu có)
   latestAnalysis?: InferenceResult;
-  
 }
 
-// --- PHẦN 1: TỪ ĐIỂN DỊCH THUẬT ---
+// --- Helper chuyển đổi an toàn từ Date|string sang string ---
+const ensureString = (value: Date | string | null | undefined): string => {
+  if (!value) return new Date().toISOString();
+  if (typeof value === 'string') return value;
+  return value.toISOString();
+};
+
+// --- TỪ ĐIỂN DỊCH THUẬT ---
 const TAG_TRANSLATIONS: Record<string, string> = {
-  // Gaze (Ánh nhìn)
   'GAZE_FOCUSED': 'Tập trung',
   'GAZE_NOT_FOCUSED': 'Mất tập trung',
   'GAZE_DISTRACTED': 'Xao nhãng',
   'FOCUSED': 'Tập trung',
   'NOT_FOCUSED': 'Không tập trung',
-  
-  // Engagement (Mức độ tương tác)
   'ENGAGEMENT_HIGH': 'Tương tác cao',
   'ENGAGEMENT_MEDIUM': 'Tương tác trung bình',
   'ENGAGEMENT_LOW': 'Tương tác thấp',
-  
-  // Affect/Emotion (Cảm xúc)
   'AFFECT_POSITIVE': 'Cảm xúc tích cực',
   'AFFECT_NEGATIVE': 'Cảm xúc tiêu cực',
   'AFFECT_NEUTRAL': 'Cảm xúc bình thường',
-  
-  // Các từ khóa khác
   'HAPPY': 'Vui vẻ',
   'SAD': 'Buồn',
   'NEUTRAL': 'Bình thường'
 };
 
-// Hàm hỗ trợ dịch tag
 const translateTag = (tag: string): string => {
   if (!tag) return '';
   const normalizedKey = tag.toUpperCase().replace(/\s+/g, '_');
   return TAG_TRANSLATIONS[normalizedKey] || tag;
 };
 
-// --- PHẦN 2: HÀM SINH CÂU GIẢI THÍCH TIẾNG VIỆT (THÊM VÀO ĐÂY) ---
+// --- Hàm chuyển đổi từ dữ liệu DB sang LongitudinalRecord ---
+const mapAssessmentToLongitudinalRecord = (assessment: db.Assessment): LongitudinalRecord => {
+  const gameSessions = db.getGameSessionsByAssessment(assessment.id);
+  const features: any[] = [];
+
+  let avgAttention = 0, avgSmile = 0, gazeStability = 0, engagement = 0;
+
+  if (gameSessions.length > 0) {
+    const metrics = db.getMetricsByGameSession(gameSessions[0].id);
+    const attentionMetric = metrics.find(m => m.metric_key === 'avg_attention');
+    const smileMetric = metrics.find(m => m.metric_key === 'avg_smile');
+    const gazeMetric = metrics.find(m => m.metric_key === 'gaze_stability');
+    const engagementMetric = metrics.find(m => m.metric_key === 'engagement');
+
+    avgAttention = attentionMetric?.metric_value ?? 0;
+    avgSmile = smileMetric?.metric_value ?? 0;
+    gazeStability = gazeMetric?.metric_value ?? 0;
+    engagement = engagementMetric?.metric_value ?? 0;
+  }
+
+  return {
+    id: assessment.id,
+    date: ensureString(assessment.completed_at || assessment.created_at), // ✅ Ép kiểu về string
+    riskScore: assessment.overall_risk_score || 0,
+    observations: [
+      `Trạng thái: ${assessment.status}`,
+      `Điểm: ${assessment.overall_risk_score || '--'}`
+    ],
+    features,
+    metrics: {
+      attention: avgAttention,
+      smile: avgSmile,
+      gazeStability: gazeStability,
+      engagement: engagement
+    }
+  };
+};
+
+// --- HÀM SINH CÂU GIẢI THÍCH ---
 const generateVietnameseExplanation = (analysis?: InferenceResult): string => {
   if (!analysis || !analysis.features) {
     return "Hoàn thành một phiên chơi để xem phân tích chi tiết.";
@@ -47,33 +85,56 @@ const generateVietnameseExplanation = (analysis?: InferenceResult): string => {
 
   const { avgAttention, engagementLevel, avgSmile } = analysis.features;
   
-  // 1. Đánh giá ánh nhìn
   let gazeText = "";
   if (avgAttention >= 0.7) gazeText = "Ánh nhìn tập trung tốt";
   else if (avgAttention >= 0.4) gazeText = "Ánh nhìn ở mức ổn định";
   else gazeText = "Có dấu hiệu xao nhãng";
 
-  // 2. Đánh giá tương tác
   let engageText = "";
   if (engagementLevel >= 0.7) engageText = "tương tác rất tích cực";
   else if (engagementLevel >= 0.4) engageText = "mức độ tương tác trung bình";
   else engageText = "tương tác còn hạn chế";
 
-  // 3. Đánh giá cảm xúc (Thêm phần này cho đầy đủ)
   let emotionText = "";
   if (avgSmile >= 0.5) emotionText = ", tâm trạng vui vẻ";
   else if (avgSmile >= 0.2) emotionText = ", biểu cảm tích cực";
   
-  // Ghép lại thành câu hoàn chỉnh
   return `Hệ thống ghi nhận: ${gazeText} với ${engageText}${emotionText}.`;
 };
 
-// --- PHẦN 3: COMPONENT CHÍNH ---
+// --- COMPONENT CHÍNH ---
 export const ClinicianDashboard: React.FC<DashboardProps> = ({ 
-  records = [], 
+  childId,
+  records: propRecords = [], 
   latestAnalysis 
 }) => {
-  
+  const [dbRecords, setDbRecords] = useState<LongitudinalRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!childId) return;
+
+    const fetchData = () => {
+      setLoading(true);
+      try {
+        const assessments = db.getAssessmentsByChild(childId);
+        const mapped = assessments.map(mapAssessmentToLongitudinalRecord);
+        setDbRecords(mapped);
+      } catch (error) {
+        console.error('Lỗi khi tải dữ liệu dashboard:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [childId]);
+
+  const records = useMemo(() => {
+    if (propRecords.length > 0) return propRecords;
+    return dbRecords;
+  }, [propRecords, dbRecords]);
+
   const getLastRecord = () => records.length > 0 ? records[records.length - 1] : null;
   const lastRecord = getLastRecord();
 
@@ -101,8 +162,6 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
     ? latestAnalysis.score.toFixed(1) 
     : (lastRecord ? lastRecord.riskScore.toFixed(1) : '--');
 
-  // --- SỬ DỤNG HÀM MỚI TẠI ĐÂY ---
-  // Thay thế logic cũ bằng cách gọi hàm generateVietnameseExplanation
   const displayExplanation = generateVietnameseExplanation(latestAnalysis);
 
   const chartConfig = useMemo(() => {
@@ -134,18 +193,19 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
     </div>
   );
 
+  if (loading) {
+    return <div className="dashboard-loading">Đang tải dữ liệu...</div>;
+  }
+
   return (
     <div className="dashboard-grid">
       {/* Cột Trái: Biểu đồ & Metrics */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        
-        {/* Chart Card */}
         <div className="card">
           <div className="card-header">
             <h3>Biểu đồ theo dõi</h3>
             <p>Biến động điểm số qua các phiên đánh giá</p>
           </div>
-          
           <div style={{ width: '100%', height: '200px', position: 'relative', overflow: 'hidden' }}>
             <svg viewBox="0 0 800 250" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
               <defs>
@@ -197,7 +257,6 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
 
-        {/* Detailed Metrics Breakdown */}
         <div className="card">
           <div className="card-header">
             <h3>Chỉ số chi tiết</h3>
@@ -226,7 +285,6 @@ export const ClinicianDashboard: React.FC<DashboardProps> = ({
               <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Điểm đánh giá</span>
             </div>
             
-            {/* Hiển thị câu giải thích đã được Việt hóa */}
             <div className="ai-analysis-box">
               <p style={{ fontStyle: 'italic' }}>"{displayExplanation}"</p>
             </div>

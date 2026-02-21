@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import * as db from '../../services/dbService';
+import { useNavigate } from 'react-router-dom';
 import '../../styles.css';
 
 interface ChildProfileData {
@@ -19,6 +21,7 @@ interface ChildProfileProps {
 }
 
 const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<ChildProfileData>({
     name: '',
     gender: 'male',
@@ -29,6 +32,7 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
   
   const [calculatedAge, setCalculatedAge] = useState<{years: number; months: number} | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   // Danh sách vùng miền Việt Nam
   const regions = [
@@ -62,13 +66,11 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
     let years = today.getFullYear() - birth.getFullYear();
     let months = today.getMonth() - birth.getMonth();
     
-    // Điều chỉnh nếu tháng hiện tại nhỏ hơn tháng sinh
     if (months < 0) {
       years--;
       months += 12;
     }
     
-    // Điều chỉnh nếu ngày hiện tại nhỏ hơn ngày sinh
     if (today.getDate() < birth.getDate()) {
       months--;
       if (months < 0) {
@@ -82,28 +84,24 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setProfile(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setProfile(prev => ({ ...prev, [name]: value }));
   };
 
   const validateForm = () => {
     if (!profile.name.trim()) {
-      alert('Vui lòng nhập họ tên trẻ!');
+      setError('Vui lòng nhập họ tên trẻ!');
       return false;
     }
     
     if (!profile.birthDate) {
-      alert('Vui lòng chọn ngày sinh!');
+      setError('Vui lòng chọn ngày sinh!');
       return false;
     }
     
-    // Kiểm tra ngày sinh hợp lệ
     const birthDate = new Date(profile.birthDate);
     const today = new Date();
     if (birthDate > today) {
-      alert('Ngày sinh không được lớn hơn ngày hiện tại!');
+      setError('Ngày sinh không được lớn hơn ngày hiện tại!');
       return false;
     }
     
@@ -116,54 +114,123 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
     if (!validateForm()) return;
     
     setLoading(true);
+    setError('');
     
     try {
-      // Giả lập API call
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Lấy user ID từ localStorage - thử nhiều cách
+      let userId = localStorage.getItem('neuropath_user_id');
       
-      // Lấy thông tin người dùng từ localStorage
-      const userData = localStorage.getItem('neuropath_user');
-      const user = userData ? JSON.parse(userData) : null;
+      // Nếu không có, thử lấy từ user object
+      if (!userId) {
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          try {
+            const userData = JSON.parse(userStr);
+            userId = userData.id;
+          } catch (e) {
+            console.error('Error parsing user data:', e);
+          }
+        }
+      }
+
+      console.log('🔍 User ID from localStorage:', userId);
       
-      if (!user) {
-        alert('Vui lòng đăng nhập trước!');
+      if (!userId) {
+        setError('Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
+        setTimeout(() => navigate('/login'), 2000);
         return;
       }
+
+      // Tìm user trong DB
+      let dbUser = db.getUserById(userId);
       
-      // Tạo ID cho trẻ
-      const childId = `child_${Date.now()}`;
+      // Nếu không tìm thấy, thử tạo lại user từ thông tin trong localStorage
+      if (!dbUser) {
+        console.log('⚠️ User not found in DB, attempting to recreate from localStorage');
+        
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          try {
+            const userData = JSON.parse(userStr);
+            
+            // Tạo lại user trong DB
+            dbUser = db.createUser({
+              username: userData.email?.split('@')[0] || `user_${Date.now()}`,
+              password_hash: 'hashed_password_demo',
+              email: userData.email,
+              phone: null,
+              full_name: userData.full_name || userData.name || 'User',
+              role: userData.role || 'parent',
+            });
+            
+            console.log('✅ User recreated in DB:', dbUser);
+          } catch (e) {
+            console.error('Error recreating user:', e);
+          }
+        }
+      }
       
-      // Chuẩn bị dữ liệu trẻ
-      const childData = {
-        ...profile,
-        id: childId,
-        age: calculatedAge,
-        parentId: user.id,
-        createdAt: new Date().toISOString(),
-        screenerCompleted: false
+      console.log('👤 DB User found:', dbUser);
+      
+      if (!dbUser) {
+        setError('Không tìm thấy thông tin người dùng trong cơ sở dữ liệu. Vui lòng đăng nhập lại.');
+        setTimeout(() => navigate('/login'), 2000);
+        return;
+      }
+
+      // Kiểm tra role của user
+      if (dbUser.role !== 'parent') {
+        setError('Chỉ phụ huynh mới có thể tạo hồ sơ trẻ.');
+        return;
+      }
+
+      // Tạo child trong DB
+      console.log('📝 Creating child with data:', {
+        full_name: profile.name,
+        birth_date: profile.birthDate,
+        gender: profile.gender,
+        region: profile.region || null,
+        primary_language: profile.primaryLanguage,
+        parent_id: dbUser.id,
+        created_by: dbUser.id,
+      });
+
+      const newDbChild = db.createChild({
+        full_name: profile.name,
+        birth_date: profile.birthDate,
+        gender: profile.gender,
+        region: profile.region || null,
+        primary_language: profile.primaryLanguage,
+        notes: null,
+        parent_id: dbUser.id,
+        created_by: dbUser.id,
+      });
+
+      console.log('✅ Child created in DB:', newDbChild);
+
+      // Chuẩn bị dữ liệu trẻ cho UI
+      const childData: ChildProfileData = {
+        id: newDbChild.id,
+        name: newDbChild.full_name,
+        gender: newDbChild.gender || 'other',
+        birthDate: newDbChild.birth_date,
+        region: newDbChild.region || '',
+        primaryLanguage: newDbChild.primary_language || 'vi',
+        age: calculatedAge || undefined,
       };
-      
-      // Lấy danh sách trẻ hiện tại hoặc tạo mới
-      const existingChildren = localStorage.getItem('children_profiles');
-      let children = existingChildren ? JSON.parse(existingChildren) : [];
-      
-      // Thêm trẻ mới vào danh sách
-      children.push(childData);
-      localStorage.setItem('children_profiles', JSON.stringify(children));
-      
-      // Lưu trẻ hiện tại đang được chọn
+
+      // Lưu child ID vào localStorage
+      localStorage.setItem('neuropath_child_id', newDbChild.id);
       localStorage.setItem('current_child', JSON.stringify(childData));
-      
+
       // Gọi callback onComplete nếu có
       if (onComplete) {
         onComplete(childData);
       }
-      
-      alert('Thêm hồ sơ trẻ thành công! Tiếp theo: Làm bài sàng lọc sơ bộ.');
-      
+
     } catch (error) {
-      console.error('Error saving child profile:', error);
-      alert('Có lỗi xảy ra khi lưu hồ sơ!');
+      console.error('❌ Error saving child profile:', error);
+      setError('Có lỗi xảy ra khi lưu hồ sơ: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setLoading(false);
     }
@@ -174,6 +241,19 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
       <div className="profile-card">
         <h2 className="profile-title">Thêm hồ sơ trẻ</h2>
         <p className="profile-subtitle">Vui lòng cung cấp thông tin chi tiết về trẻ</p>
+        
+        {error && (
+          <div className="error-message" style={{
+            backgroundColor: '#fee2e2',
+            color: '#dc2626',
+            padding: '1rem',
+            borderRadius: '8px',
+            marginBottom: '1rem',
+            border: '1px solid #fecaca'
+          }}>
+            ❌ {error}
+          </div>
+        )}
         
         <form onSubmit={handleSubmit} className="profile-form">
           <div className="form-group">
@@ -190,6 +270,7 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
               required
               placeholder="Nhập họ tên đầy đủ của trẻ"
               className="form-input"
+              disabled={loading}
             />
           </div>
           
@@ -207,6 +288,7 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
                   checked={profile.gender === 'male'}
                   onChange={handleChange}
                   required
+                  disabled={loading}
                 />
                 <span className="gender-label">👦 Nam</span>
               </label>
@@ -217,6 +299,7 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
                   value="female"
                   checked={profile.gender === 'female'}
                   onChange={handleChange}
+                  disabled={loading}
                 />
                 <span className="gender-label">👧 Nữ</span>
               </label>
@@ -227,6 +310,7 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
                   value="other"
                   checked={profile.gender === 'other'}
                   onChange={handleChange}
+                  disabled={loading}
                 />
                 <span className="gender-label">👶 Khác</span>
               </label>
@@ -247,6 +331,7 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
               required
               max={new Date().toISOString().split('T')[0]}
               className="form-input"
+              disabled={loading}
             />
             {calculatedAge && (
               <div className="age-display">
@@ -275,6 +360,7 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
               onChange={handleChange}
               required
               className="form-select"
+              disabled={loading}
             >
               <option value="">Chọn vùng miền</option>
               {regions.map(region => (
@@ -298,6 +384,7 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
               onChange={handleChange}
               required
               className="form-select"
+              disabled={loading}
             >
               {languages.map(lang => (
                 <option key={lang.value} value={lang.value}>
@@ -313,6 +400,10 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
               type="submit" 
               className="submit-button"
               disabled={loading}
+              style={{
+                backgroundColor: loading ? '#9ca3af' : '#6366f1',
+                cursor: loading ? 'not-allowed' : 'pointer'
+              }}
             >
               {loading ? (
                 <>

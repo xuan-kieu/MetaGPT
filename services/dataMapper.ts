@@ -2,6 +2,16 @@
 import { BehavioralFeature, Emotion } from '../types';
 import { AssessmentInput, SkillType } from './scoringService';
 
+// Định nghĩa local các kiểu cần thiết thay vì import từ dbService (do dbService chưa export)
+type UUID = string;
+
+interface MetricInput {
+  game_session_id: UUID;
+  metric_key: string;
+  metric_value: number | null;
+  unit: string | null;
+}
+
 export class DataMapper {
   
   static mapSessionToInputs(features: BehavioralFeature[]): AssessmentInput[] {
@@ -166,5 +176,84 @@ export class DataMapper {
       groups[gameId].push(f);
     });
     return groups;
+  }
+
+  // ========== CÁC PHƯƠNG THỨC MỚI ĐƯỢC THÊM ==========
+  /**
+   * Nhóm các behavioral features theo gameId
+   */
+  static groupFeaturesByGame(features: BehavioralFeature[]): Record<string, BehavioralFeature[]> {
+    return features.reduce((acc, f) => {
+      const gameId = f.gameId || 'unknown';
+      if (!acc[gameId]) acc[gameId] = [];
+      acc[gameId].push(f);
+      return acc;
+    }, {} as Record<string, BehavioralFeature[]>);
+  }
+
+  /**
+   * Chuyển đổi các features thành mảng metrics để lưu vào bảng game_session_metrics
+   * @param gameSessionId ID của game session
+   * @param features Mảng behavioral features của session đó
+   * @returns Mảng các metric (chưa có id và captured_at)
+   */
+  static mapFeaturesToMetrics(
+    gameSessionId: UUID,
+    features: BehavioralFeature[]
+  ): MetricInput[] {
+    // Nếu không có features, trả về mảng rỗng
+    if (!features.length) return [];
+
+    const metrics: MetricInput[] = [];
+
+    // Tính các giá trị tổng hợp từ features
+    const avgAttention = features.reduce((sum, f) => sum + f.attentionLevel, 0) / features.length;
+    const avgSmile = features.reduce((sum, f) => sum + f.smileIntensity, 0) / features.length;
+    const gazeStability = this.calculateGazeStability(features);
+    const handEyeCoordination = this.calculateHandEyeCoordination(features);
+    const imitationScore = this.calculateImitationScore(features);
+    const emotionRecognition = this.calculateEmotionRecognitionScore(features);
+
+    // Thêm các metric tổng hợp
+    metrics.push(
+      {
+        game_session_id: gameSessionId,
+        metric_key: 'avg_attention',
+        metric_value: avgAttention,
+        unit: 'ratio',
+      },
+      {
+        game_session_id: gameSessionId,
+        metric_key: 'avg_smile',
+        metric_value: avgSmile,
+        unit: 'ratio',
+      },
+      {
+        game_session_id: gameSessionId,
+        metric_key: 'gaze_stability',
+        metric_value: gazeStability,
+        unit: 'percent',
+      },
+      {
+        game_session_id: gameSessionId,
+        metric_key: 'hand_eye_coordination',
+        metric_value: handEyeCoordination,
+        unit: 'percent',
+      },
+      {
+        game_session_id: gameSessionId,
+        metric_key: 'imitation_score',
+        metric_value: imitationScore,
+        unit: 'percent',
+      },
+      {
+        game_session_id: gameSessionId,
+        metric_key: 'emotion_recognition',
+        metric_value: emotionRecognition,
+        unit: 'percent',
+      }
+    );
+
+    return metrics;
   }
 }
