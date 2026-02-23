@@ -11,7 +11,7 @@ const { generateToken } = require('../utils/tokenGenerator');
  */
 exports.register = async (req, res) => {
     try {
-        const { username, email, password, full_name, role } = req.body;
+        const { username, email, password, full_name, role, phone } = req.body;
 
         // Kiểm tra dữ liệu đầu vào
         const errors = [];
@@ -296,7 +296,11 @@ exports.forgotPassword = async (req, res) => {
         const expiresAt = new Date(Date.now() + 3600000); // 1 giờ
 
         await PasswordReset.create(user.id, resetToken, expiresAt);
-        await sendResetEmail(email, resetToken);
+        try {
+            await sendResetEmail(email, resetToken);
+        } catch (emailError) {
+            console.error("Gửi email thất bại nhưng không crash:", emailError.message);
+        }
 
         res.json({ 
             message: 'Email khôi phục mật khẩu đã được gửi' 

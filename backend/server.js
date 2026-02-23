@@ -58,13 +58,9 @@ const startServer = async () => {
         await getConnection();
         console.log('✅ Kết nối database thành công');
 
-        // Kiểm tra kết nối email
-        const emailOk = await verifyConnection();
-        if (emailOk) {
-            console.log('✅ Kết nối email thành công');
-        } else {
-            console.warn('⚠️ Cảnh báo: Kết nối email thất bại, chức năng gửi email sẽ không hoạt động');
-        }
+        // TẠM TẮT EMAIL VERIFY
+        // const emailOk = await verifyConnection();
+        console.log("⏭ Bỏ qua kiểm tra email khi khởi động");
 
         // Khởi động server
         app.listen(PORT, '0.0.0.0', () => {
