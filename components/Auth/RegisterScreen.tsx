@@ -455,7 +455,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin }) => {
             <Link to="/forgot-password" style={{ color: '#94a3b8', fontSize: '0.85rem', textDecoration: 'none' }}>
               Quên mật khẩu?
             </Link>
-          </div>
+          </div>  
         </form>
       </div>
     </div>

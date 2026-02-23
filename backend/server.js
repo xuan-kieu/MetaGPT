@@ -54,12 +54,13 @@ app.use((err, req, res, next) => {
 // Khởi động server và kiểm tra kết nối
 const startServer = async () => {
     try {
-        // Kiểm tra kết nối database
-        await getConnection();
-        console.log('✅ Kết nối database thành công');
+        // ❌ KHÔNG await nữa
+        getConnection()
+          .then(() => console.log('✅ Kết nối database thành công'))
+          .catch(err => {
+              console.error('❌ Lỗi kết nối database:', err.message);
+          });
 
-        // TẠM TẮT EMAIL VERIFY
-        // const emailOk = await verifyConnection();
         console.log("⏭ Bỏ qua kiểm tra email khi khởi động");
 
         // Khởi động server
@@ -68,9 +69,10 @@ const startServer = async () => {
             console.log(`📝 Môi trường: ${process.env.NODE_ENV}`);
             console.log(`🔗 Client URL: ${process.env.CLIENT_URL}`);
         });
+
     } catch (error) {
         console.error('❌ Không thể khởi động server:', error);
-        process.exit(1);
+        // ❌ ĐÃ XÓA process.exit(1)
     }
 };
 startServer();
