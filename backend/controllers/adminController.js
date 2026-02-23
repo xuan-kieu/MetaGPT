@@ -295,3 +295,124 @@ exports.getSystemStats = async (req, res) => {
         res.status(500).json({ error: 'Đã xảy ra lỗi máy chủ' });
     }
 };
+// Thêm vào cuối file adminController.js
+
+/**
+ * Lấy user theo ID
+ */
+exports.getUserById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const user = await User.findById(id);
+        if (!user) {
+            return res.status(404).json({ error: 'Không tìm thấy người dùng' });
+        }
+        res.json(user);
+    } catch (err) {
+        console.error('Lỗi lấy user:', err);
+        res.status(500).json({ error: 'Đã xảy ra lỗi máy chủ' });
+    }
+};
+
+/**
+ * Lấy child theo ID
+ */
+exports.getChildById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const child = await Child.findById(id);
+        if (!child) {
+            return res.status(404).json({ error: 'Không tìm thấy trẻ' });
+        }
+        res.json(child);
+    } catch (err) {
+        console.error('Lỗi lấy child:', err);
+        res.status(500).json({ error: 'Đã xảy ra lỗi máy chủ' });
+    }
+};
+
+/**
+ * Lấy tất cả norms
+ */
+exports.getNorms = async (req, res) => {
+    try {
+        const norms = await Norm.findAll();
+        res.json(norms);
+    } catch (err) {
+        console.error('Lỗi lấy norms:', err);
+        res.status(500).json({ error: 'Đã xảy ra lỗi máy chủ' });
+    }
+};
+
+/**
+ * Lấy norm theo ID
+ */
+exports.getNormById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const norm = await Norm.findById(id);
+        if (!norm) {
+            return res.status(404).json({ error: 'Không tìm thấy norm' });
+        }
+        res.json(norm);
+    } catch (err) {
+        console.error('Lỗi lấy norm:', err);
+        res.status(500).json({ error: 'Đã xảy ra lỗi máy chủ' });
+    }
+};
+
+/**
+ * Lấy tất cả games
+ */
+exports.getGames = async (req, res) => {
+    try {
+        const games = await Game.findAll();
+        res.json(games);
+    } catch (err) {
+        console.error('Lỗi lấy games:', err);
+        res.status(500).json({ error: 'Đã xảy ra lỗi máy chủ' });
+    }
+};
+
+/**
+ * Lấy game theo ID
+ */
+exports.getGameById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const game = await Game.findById(id);
+        if (!game) {
+            return res.status(404).json({ error: 'Không tìm thấy game' });
+        }
+        res.json(game);
+    } catch (err) {
+        console.error('Lỗi lấy game:', err);
+        res.status(500).json({ error: 'Đã xảy ra lỗi máy chủ' });
+    }
+};
+
+/**
+ * Lấy danh sách skills
+ */
+exports.getSkills = async (req, res) => {
+    try {
+        // Tạm thời trả về mảng rỗng
+        res.json([]);
+    } catch (err) {
+        console.error('Lỗi lấy skills:', err);
+        res.status(500).json({ error: 'Đã xảy ra lỗi máy chủ' });
+    }
+};
+
+/**
+ * Lấy danh sách age groups
+ */
+exports.getAgeGroups = async (req, res) => {
+    try {
+        // Tạm thời trả về mảng rỗng
+        res.json([]);
+    } catch (err) {
+        console.error('Lỗi lấy age groups:', err);
+        res.status(500).json({ error: 'Đã xảy ra lỗi máy chủ' });
+    }
+};

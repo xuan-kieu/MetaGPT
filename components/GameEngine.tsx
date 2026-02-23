@@ -1,5 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { BehavioralFeature, InferenceResult, GameConfig, GameEngineProps } from '../types';
+import { 
+  BehavioralFeature, 
+  InferenceResult, 
+  GameConfig, 
+  GameEngineProps,
+  GameModule,
+  AgeGroupConfig,
+  SessionPhase,
+  GatewayResult,
+  SessionResult,
+  SessionSummary,
+  AdaptiveFlow,
+  GatewayDecision
+} from '../types';
 import inferenceService from '../services/InferenceService';
 
 // --- IMPORT CÁC GAME CON ---
@@ -31,7 +44,7 @@ import G4_3_CuaHangTiHon from '../ageGroup/Group3_5year/G4_3_CuaHangTiHon';
 import G4_4_LamTheoChiDan from '../ageGroup/Group3_5year/G4_4_LamTheoChiDan';
 import G4_5_GiaiMaQuyTac from '../ageGroup/Group3_5year/G4_5_GiaiMaQuyTac';
 
-// --- CSS GỐC ---
+// --- CSS STYLES ---
 const globalStyles = `
   :root {
     --primary: #6366f1;
@@ -42,6 +55,11 @@ const globalStyles = `
     --emerald-500: #10b981;
     --white: #ffffff;
     --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    --amber-500: #f59e0b;
+    --red-500: #ef4444;
+    --blue-500: #3b82f6;
+    --purple-500: #8b5cf6;
+    --indigo-500: #6366f1;
   }
 
   .game-engine-container {
@@ -62,7 +80,7 @@ const globalStyles = `
     display: flex;
     justify-content: center;
     align-items: center;
-    background-color: #f0fdf4;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     overflow: hidden;
   }
 
@@ -85,6 +103,49 @@ const globalStyles = `
     gap: 5px;
   }
 
+  .phase-badge {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .phase-gateway {
+    background-color: var(--amber-500);
+    color: var(--white);
+  }
+
+  .phase-full {
+    background-color: var(--emerald-500);
+    color: var(--white);
+  }
+
+  .phase-reduced {
+    background-color: var(--blue-500);
+    color: var(--white);
+  }
+
+  .gateway-result {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin: 0 2px;
+  }
+
+  .gateway-success {
+    background-color: var(--emerald-500);
+  }
+
+  .gateway-failure {
+    background-color: var(--red-500);
+  }
+
+  .gateway-pending {
+    background-color: var(--slate-200);
+  }
+
   .game-progress-container {
     height: 6px;
     background-color: var(--slate-200);
@@ -93,7 +154,7 @@ const globalStyles = `
 
   .game-progress-fill {
     height: 100%;
-    background-color: var(--emerald-500);
+    background: linear-gradient(90deg, var(--emerald-500), var(--indigo-500));
     transition: width 0.3s ease;
   }
 
@@ -105,6 +166,7 @@ const globalStyles = `
     flex-wrap: wrap;
     box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
     border-top: 1px solid var(--slate-200);
+    overflow-x: auto;
   }
 
   .nav-btn {
@@ -115,6 +177,7 @@ const globalStyles = `
     font-weight: 600;
     font-size: 0.9rem;
     transition: all 0.2s;
+    white-space: nowrap;
   }
 
   .nav-btn.active {
@@ -128,6 +191,12 @@ const globalStyles = `
     color: #64748b;
   }
 
+  .nav-btn.played {
+    background-color: #d1fae5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+  }
+
   .nav-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -139,56 +208,101 @@ const globalStyles = `
     pointer-events: none;
     z-index: -1;
   }
+
+  .adaptive-flow-badge {
+    background: linear-gradient(135deg, var(--purple-500), var(--blue-500));
+    color: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 10px;
+  }
+
+  .game-info-overlay {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 30px;
+    font-size: 14px;
+    z-index: 100;
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255,255,255,0.2);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+  }
+
+  .gateway-summary {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background: rgba(255,255,255,0.2);
+    padding: 4px 12px;
+    border-radius: 20px;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .loading-pulse {
+    animation: pulse 1.5s ease-in-out infinite;
+  }
 `;
 
-// --- ĐỊNH NGHĨA CẤU TRÚC NHÓM TUỔI (BỔ SUNG isGateway, isOptional) ---
-interface AgeGroupConfig {
-  totalDuration: number;
-  games: Array<{
-    id: string;
-    name: string;
-    duration: number;
-    component: React.ComponentType<any>;
-    isGateway: boolean;   // 3 game đầu là gateway
-    isOptional: boolean;  // Các game còn lại là tùy chọn
-  }>;
-}
-
-// --- HÀM CHỌN GAME THEO ĐỘ TUỔI (THÊM FLAG) ---
+// --- HÀM CHỌN GAME THEO ĐỘ TUỔI (ĐÃ CẬP NHẬT ĐÚNG SỐ LƯỢNG) ---
 const getAgeGroupConfig = (age: number): AgeGroupConfig | null => {
   if (age >= 12 && age < 18) {
     return {
-      totalDuration: 10 * 60,
+      totalDuration: 20 * 60, // 20 phút cho 8 game
       games: [
-        { id: 'G1.1', name: 'Bong Bóng Biết Bay', duration: 120, component: G1_1_Balloon, isGateway: true, isOptional: false },
-        { id: 'G1.2', name: 'Vỗ Tay Vui Nhộn', duration: 120, component: G1_2_Clapping, isGateway: true, isOptional: false },
-        { id: 'G1.3', name: 'Bé Ơi Quay Lại Nào', duration: 120, component: G1_3_Attention, isGateway: true, isOptional: false },
-        { id: 'G1.4', name: 'Ú Òa Kỳ Diệu', duration: 120, component: G1_4_Peekaboo, isGateway: false, isOptional: true },
-        { id: 'G1.5', name: 'Theo Dõi Đồ Chơi', duration: 120, component: G1_5_ToyTracking, isGateway: false, isOptional: true }
+        // 3 GATEWAY GAMES - BẮT BUỘC CHO MỌI LỨA TUỔI
+        { id: 'GW1', name: 'Bong Bóng Biết Bay', duration: 150, component: G1_1_Balloon, isGateway: true, isOptional: false },
+        { id: 'GW2', name: 'Vỗ Tay Vui Nhộn', duration: 150, component: G1_2_Clapping, isGateway: true, isOptional: false },
+        { id: 'GW3', name: 'Bé Ơi Quay Lại Nào', duration: 150, component: G1_3_Attention, isGateway: true, isOptional: false },
+        // 5 GAME RIÊNG CỦA NHÓM 12-18 THÁNG
+        { id: 'G1.1', name: 'Ú Òa Kỳ Diệu', duration: 150, component: G1_4_Peekaboo, isGateway: false, isOptional: true },
+        { id: 'G1.2', name: 'Theo Dõi Đồ Chơi', duration: 150, component: G1_5_ToyTracking, isGateway: false, isOptional: true },
+        { id: 'G1.3', name: 'Chơi Úp Mở', duration: 150, component: G1_4_Peekaboo, isGateway: false, isOptional: true },
+        { id: 'G1.4', name: 'Lắc Xắc Xô', duration: 150, component: G1_2_Clapping, isGateway: false, isOptional: true },
+        { id: 'G1.5', name: 'Chào Tạm Biệt', duration: 150, component: G1_3_Attention, isGateway: false, isOptional: true }
       ]
     };
   }
 
   if (age >= 18 && age < 24) {
     return {
-      totalDuration: 13 * 60,
+      totalDuration: 25 * 60, // 25 phút cho 8 game
       games: [
-        { id: 'G2.1', name: 'Chỉ Tay Tinh Mắt', duration: 180, component: G2_1_ChiTayTinhMat, isGateway: true, isOptional: false },
-        { id: 'G2.2', name: 'Xây Tháp Cao', duration: 180, component: G2_2_XayThapCao, isGateway: true, isOptional: false },
-        { id: 'G2.3', name: 'Tiếng Kêu Của Ai', duration: 120, component: G2_3_TiengKeuCuaAi, isGateway: true, isOptional: false },
+        // 3 GATEWAY GAMES - BẮT BUỘC CHO MỌI LỨA TUỔI
+        { id: 'GW1', name: 'Bong Bóng Biết Bay', duration: 150, component: G1_1_Balloon, isGateway: true, isOptional: false },
+        { id: 'GW2', name: 'Vỗ Tay Vui Nhộn', duration: 150, component: G1_2_Clapping, isGateway: true, isOptional: false },
+        { id: 'GW3', name: 'Bé Ơi Quay Lại Nào', duration: 150, component: G1_3_Attention, isGateway: true, isOptional: false },
+        // 5 GAME RIÊNG CỦA NHÓM 18-24 THÁNG
+        { id: 'G2.1', name: 'Chỉ Tay Tinh Mắt', duration: 180, component: G2_1_ChiTayTinhMat, isGateway: false, isOptional: true },
+        { id: 'G2.2', name: 'Xây Tháp Cao', duration: 180, component: G2_2_XayThapCao, isGateway: false, isOptional: true },
+        { id: 'G2.3', name: 'Tiếng Kêu Của Ai', duration: 150, component: G2_3_TiengKeuCuaAi, isGateway: false, isOptional: true },
         { id: 'G2.4', name: 'Cho Búp Bê Ăn', duration: 180, component: G2_4_ChoBupBeAn, isGateway: false, isOptional: true },
-        { id: 'G2.5', name: 'Tìm Bóng Hình', duration: 120, component: G2_5_TimBongHinh, isGateway: false, isOptional: true }
+        { id: 'G2.5', name: 'Tìm Bóng Hình', duration: 150, component: G2_5_TimBongHinh, isGateway: false, isOptional: true }
       ]
     };
   }
 
   if (age >= 24 && age < 36) {
     return {
-      totalDuration: 15 * 60,
+      totalDuration: 30 * 60, // 30 phút cho 8 game
       games: [
-        { id: 'G3.1', name: 'Về Đúng Nhà Nào', duration: 180, component: G3_1_VeDungNhaNao, isGateway: true, isOptional: false },
-        { id: 'G3.2', name: 'Cảm Xúc Gì Đây', duration: 180, component: G3_2_CamXucGiDay, isGateway: true, isOptional: false },
-        { id: 'G3.3', name: 'Đến Lượt Con Rồi', duration: 180, component: G3_3_DenLuotConRoii, isGateway: true, isOptional: false },
+        // 3 GATEWAY GAMES - BẮT BUỘC CHO MỌI LỨA TUỔI
+        { id: 'GW1', name: 'Bong Bóng Biết Bay', duration: 150, component: G1_1_Balloon, isGateway: true, isOptional: false },
+        { id: 'GW2', name: 'Vỗ Tay Vui Nhộn', duration: 150, component: G1_2_Clapping, isGateway: true, isOptional: false },
+        { id: 'GW3', name: 'Bé Ơi Quay Lại Nào', duration: 150, component: G1_3_Attention, isGateway: true, isOptional: false },
+        // 5 GAME RIÊNG CỦA NHÓM 2-3 TUỔI
+        { id: 'G3.1', name: 'Về Đúng Nhà Nào', duration: 180, component: G3_1_VeDungNhaNao, isGateway: false, isOptional: true },
+        { id: 'G3.2', name: 'Cảm Xúc Gì Đây', duration: 180, component: G3_2_CamXucGiDay, isGateway: false, isOptional: true },
+        { id: 'G3.3', name: 'Đến Lượt Con Rồi', duration: 180, component: G3_3_DenLuotConRoii, isGateway: false, isOptional: true },
         { id: 'G3.4', name: 'Tìm Hình Ghép Cặp', duration: 180, component: G3_4_TimHinhGhepCap, isGateway: false, isOptional: true },
         { id: 'G3.5', name: 'Mê Cung Đơn Giản', duration: 180, component: G3_5_MeCungDonGian, isGateway: false, isOptional: true }
       ]
@@ -197,22 +311,34 @@ const getAgeGroupConfig = (age: number): AgeGroupConfig | null => {
 
   if (age >= 36 && age <= 60) {
     return {
-      totalDuration: 18 * 60,
+      totalDuration: 35 * 60, // 35 phút cho 8 game
       games: [
-        { id: 'G4.1', name: 'Vì Sao Thế Nhỉ', duration: 240, component: G4_1_ViSaoTheNhi, isGateway: true, isOptional: false },
-        { id: 'G4.2', name: 'Sắp Xếp Câu Chuyện', duration: 240, component: G4_2_SapXepCauChuyen, isGateway: true, isOptional: false },
-        { id: 'G4.3', name: 'Cửa Hàng Tí Hon', duration: 240, component: G4_3_CuaHangTiHon, isGateway: true, isOptional: false },
+        // 3 GATEWAY GAMES - BẮT BUỘC CHO MỌI LỨA TUỔI
+        { id: 'GW1', name: 'Bong Bóng Biết Bay', duration: 150, component: G1_1_Balloon, isGateway: true, isOptional: false },
+        { id: 'GW2', name: 'Vỗ Tay Vui Nhộn', duration: 150, component: G1_2_Clapping, isGateway: true, isOptional: false },
+        { id: 'GW3', name: 'Bé Ơi Quay Lại Nào', duration: 150, component: G1_3_Attention, isGateway: true, isOptional: false },
+        // 5 GAME RIÊNG CỦA NHÓM 3-5 TUỔI
+        { id: 'G4.1', name: 'Vì Sao Thế Nhỉ', duration: 240, component: G4_1_ViSaoTheNhi, isGateway: false, isOptional: true },
+        { id: 'G4.2', name: 'Sắp Xếp Câu Chuyện', duration: 240, component: G4_2_SapXepCauChuyen, isGateway: false, isOptional: true },
+        { id: 'G4.3', name: 'Cửa Hàng Tí Hon', duration: 240, component: G4_3_CuaHangTiHon, isGateway: false, isOptional: true },
         { id: 'G4.4', name: 'Làm Theo Chỉ Dẫn', duration: 180, component: G4_4_LamTheoChiDan, isGateway: false, isOptional: true },
         { id: 'G4.5', name: 'Giải Mã Quy Tắc', duration: 180, component: G4_5_GiaiMaQuyTac, isGateway: false, isOptional: true }
       ]
     };
   }
 
-  // Fallback
+  // Fallback cho độ tuổi không được hỗ trợ
   return {
-    totalDuration: 10 * 60,
+    totalDuration: 15 * 60,
     games: [
-      { id: 'TEST', name: 'Chưa hỗ trợ độ tuổi này', duration: 60, component: G1_1_Balloon, isGateway: true, isOptional: false }
+      { id: 'GW1', name: 'Bong Bóng', duration: 120, component: G1_1_Balloon, isGateway: true, isOptional: false },
+      { id: 'GW2', name: 'Vỗ Tay', duration: 120, component: G1_2_Clapping, isGateway: true, isOptional: false },
+      { id: 'GW3', name: 'Bé Ơi', duration: 120, component: G1_3_Attention, isGateway: true, isOptional: false },
+      { id: 'F1', name: 'Game mẫu 1', duration: 120, component: G1_4_Peekaboo, isGateway: false, isOptional: true },
+      { id: 'F2', name: 'Game mẫu 2', duration: 120, component: G1_5_ToyTracking, isGateway: false, isOptional: true },
+      { id: 'F3', name: 'Game mẫu 3', duration: 120, component: G1_4_Peekaboo, isGateway: false, isOptional: true },
+      { id: 'F4', name: 'Game mẫu 4', duration: 120, component: G1_2_Clapping, isGateway: false, isOptional: true },
+      { id: 'F5', name: 'Game mẫu 5', duration: 120, component: G1_3_Attention, isGateway: false, isOptional: true }
     ]
   };
 };
@@ -220,9 +346,12 @@ const getAgeGroupConfig = (age: number): AgeGroupConfig | null => {
 // --- COMPONENT CHÍNH ---
 export const GameEngine: React.FC<GameEngineProps> = ({
   age,
-  themeId,
-  specificAsset,
+  themeId = 'default',
+  specificAsset = null,
   childName,
+  childId,
+  assessmentId,
+  userId,
   onFeatureCapture,
   onSessionEnd
 }) => {
@@ -230,9 +359,10 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const latestAIResult = useRef<InferenceResult | null>(null);
   const allFeaturesBuffer = useRef<BehavioralFeature[]>([]);
+  const gatewayResultsRef = useRef<GatewayResult[]>([]);
 
   // Timers
-  const gameStartTimeRef = useRef<number>(Date.now());
+  const sessionStartTimeRef = useRef<number>(Date.now());
   const currentGameStartTimeRef = useRef<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -243,23 +373,76 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const [inferenceStatus, setInferenceStatus] = useState('Đang khởi tạo...');
   const [currentGameTime, setCurrentGameTime] = useState(0);
   const [ageGroup, setAgeGroup] = useState<AgeGroupConfig | null>(null);
-  // Kết quả của các gateway games (true = thành công, false = thất bại, null = chưa chơi)
-  const [gatewayResults, setGatewayResults] = useState<(boolean | null)[]>([]);
+  
+  // State cho gateway games và adaptive flow
+  const [phase, setPhase] = useState<SessionPhase>('gateway');
+  const [adaptiveFlow, setAdaptiveFlow] = useState<'full' | 'reduced'>('full');
+  const [gatewayResults, setGatewayResults] = useState<boolean[]>([]);
+  const [isSessionEnding, setIsSessionEnding] = useState(false);
 
-  // Ref để lưu hàm handleGameComplete mới nhất (tránh closure cũ trong timer)
+  // Ref để lưu hàm handleGameComplete mới nhất
   const handleGameCompleteRef = useRef<(success: boolean) => void>(() => {});
+
+  // Lấy danh sách gateway games (3 game đầu)
+  const gatewayGames = ageGroup?.games.filter(g => g.isGateway) || [];
+  
+  // Lấy danh sách game riêng của nhóm tuổi (5 game sau)
+  const ageSpecificGames = ageGroup?.games.filter(g => !g.isGateway) || [];
+
+  // Xác định danh sách game hiện tại dựa trên phase và adaptive flow
+  const getCurrentGames = useCallback(() => {
+    if (!ageGroup) return [];
+    
+    if (phase === 'gateway') {
+      return gatewayGames; // 3 game gateway
+    } else {
+      // Sau gateway, chọn số lượng game riêng phù hợp
+      if (adaptiveFlow === 'reduced') {
+        // Phiên rút gọn: chỉ chơi 4/5 game riêng
+        return ageSpecificGames.slice(0, 4);
+      } else {
+        // Phiên đầy đủ: chơi cả 5 game riêng
+        return ageSpecificGames;
+      }
+    }
+  }, [phase, adaptiveFlow, ageGroup, gatewayGames, ageSpecificGames]);
+
+  const currentGames = getCurrentGames();
+
+  // Tính tổng số game dựa trên adaptive flow
+  const getTotalGamesCount = useCallback(() => {
+    if (!ageGroup) return 0;
+    
+    if (phase === 'gateway') {
+      return gatewayGames.length; // 3 game
+    } else {
+      // 3 gateway + số game riêng hiện tại
+      return gatewayGames.length + currentGames.length;
+    }
+  }, [phase, ageGroup, gatewayGames, currentGames]);
+
+  // Tính số game đã hoàn thành
+  const getCompletedGamesCount = useCallback(() => {
+    if (phase === 'gateway') {
+      return gatewayResults.length;
+    } else {
+      return gatewayGames.length + currentGameIndex;
+    }
+  }, [phase, gatewayResults.length, gatewayGames.length, currentGameIndex]);
 
   // 1. Khởi tạo danh sách game và config
   useEffect(() => {
     const group = getAgeGroupConfig(age);
     setAgeGroup(group);
     setCurrentGameIndex(0);
-    // Reset kết quả gateway: tạo mảng null với độ dài bằng số gateway games
-    if (group) {
-      const gatewayCount = group.games.filter(g => g.isGateway).length;
-      setGatewayResults(Array(gatewayCount).fill(null));
+    setPhase('gateway');
+    setAdaptiveFlow('full');
+    setGatewayResults([]);
+    gatewayResultsRef.current = [];
+    setIsSessionEnding(false);
+    sessionStartTimeRef.current = Date.now();
 
-      // Tạo GameConfig mặc định
+    if (group) {
       const defaultConfig: GameConfig = {
         ageRange: `${age}-${age + 6}`,
         jumpInterval: 2,
@@ -269,84 +452,234 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         theme: {
           id: themeId || 'default',
           name: themeId === 'default' ? 'Mặc định' : 'Chủ đề đã chọn',
-          assets: [],
+          assets: specificAsset ? [specificAsset] : [],
           background: '#f0fdf4',
         }
       };
       setConfig(defaultConfig);
     }
-  }, [age, themeId]);
+  }, [age, themeId, specificAsset]);
 
-  // 2. Định nghĩa hàm xử lý kết thúc game (dùng useCallback để ổn định, nhưng sẽ được cập nhật qua ref)
+  // Hàm tính toán metrics cho từng game
+  const calculateGameMetrics = useCallback((duration: number, gameId: string) => {
+    const gameFeatures = allFeaturesBuffer.current.filter(f => f.gameId === gameId);
+    
+    if (gameFeatures.length === 0) {
+      return {
+        attentionLevel: 0.5,
+        engagementScore: 0.5,
+        smileIntensity: 0,
+        gazeStability: 50,
+        completionRate: duration / 120
+      };
+    }
+    
+    const avgAttention = gameFeatures.reduce((sum, f) => sum + f.attentionLevel, 0) / gameFeatures.length;
+    const avgSmile = gameFeatures.reduce((sum, f) => sum + f.smileIntensity, 0) / gameFeatures.length;
+    const gazeStability = calculateGazeStability(gameFeatures);
+    
+    return {
+      attentionLevel: avgAttention,
+      engagementScore: (avgAttention + avgSmile) / 2,
+      smileIntensity: avgSmile,
+      gazeStability: gazeStability,
+      completionRate: duration / (ageGroup?.games.find(g => g.id === gameId)?.duration || 120)
+    };
+  }, [ageGroup]);
+
+  // Hàm tính độ ổn định của gaze
+  const calculateGazeStability = (features: BehavioralFeature[]): number => {
+    if (features.length < 5) return 50;
+    
+    const gazePoints = features
+      .filter(f => f.gazeX !== undefined && f.gazeY !== undefined)
+      .map(f => ({ x: f.gazeX!, y: f.gazeY! }));
+    
+    if (gazePoints.length < 5) return 50;
+    
+    let totalDistance = 0;
+    for (let i = 1; i < gazePoints.length; i++) {
+      const dx = gazePoints[i].x - gazePoints[i-1].x;
+      const dy = gazePoints[i].y - gazePoints[i-1].y;
+      totalDistance += Math.sqrt(dx*dx + dy*dy);
+    }
+    
+    const avgDistance = totalDistance / (gazePoints.length - 1);
+    return Math.max(0, 100 - Math.min(avgDistance * 10, 100));
+  };
+
+  // Hàm tính summary tổng thể
+  const calculateSessionSummary = useCallback((): SessionSummary => {
+    const features = allFeaturesBuffer.current;
+    if (features.length === 0) return {};
+    
+    const avgAttention = features.reduce((sum, f) => sum + f.attentionLevel, 0) / features.length;
+    const smileFeatures = features.filter(f => f.smileIntensity > 0.5);
+    const smileFrequency = smileFeatures.length / features.length;
+    const gazeStability = calculateGazeStability(features);
+    const vocalFeatures = features.filter(f => (f.vocalVolume || 0) > 0.1);
+    const vocalizationRate = vocalFeatures.length / features.length;
+    const gatewaySuccessRate = gatewayResultsRef.current.length > 0 
+      ? gatewayResultsRef.current.filter(r => r.success).length / gatewayResultsRef.current.length 
+      : 0;
+    
+    const totalGamesPlayed = phase === 'gateway' 
+      ? gatewayResults.length 
+      : gatewayGames.length + currentGames.length;
+    
+    return {
+      attentionScore: avgAttention * 100,
+      socialEngagement: (avgAttention * 0.3 + smileFrequency * 0.7) * 100,
+      cognitiveScore: (gatewaySuccessRate * 0.5 + avgAttention * 0.5) * 100,
+      gazeStability: gazeStability,
+      smileFrequency: smileFrequency * 100,
+      vocalizationRate: vocalizationRate * 100,
+      gatewaySuccessRate: gatewaySuccessRate * 100,
+      averageAttention: avgAttention,
+      totalDuration: (Date.now() - sessionStartTimeRef.current) / 1000,
+      adaptiveFlow: adaptiveFlow,
+      totalGamesPlayed: totalGamesPlayed,
+      gatewayResults: gatewayResultsRef.current
+    };
+  }, [adaptiveFlow, gatewayGames.length, currentGames.length, phase, gatewayResults.length]);
+
+  // 2. Hàm quyết định luồng thích ứng dựa trên kết quả gateway
+  const decideAdaptiveFlow = useCallback((gatewayResults: boolean[]): GatewayDecision => {
+    const successCount = gatewayResults.filter(r => r === true).length;
+    const totalGames = gatewayResults.length;
+    
+    // Nếu trẻ thất bại ≥2/3 gateway games (chỉ thắng 0-1) → Phiên rút gọn: 3 gateway + 4 game riêng = 7 game
+    if (successCount <= 1) {
+      return {
+        successCount,
+        totalGames,
+        decision: 'reduced',
+        reason: 'Trẻ chưa hợp tác tốt, chuyển sang phiên rút gọn (3 gateway + 4 game riêng = 7 game) để ưu tiên các dấu hiệu lõi'
+      };
+    } else {
+      // Nếu trẻ thành công ≥2/3 (thắng 2-3) → Phiên đầy đủ: 3 gateway + 5 game riêng = 8 game
+      return {
+        successCount,
+        totalGames,
+        decision: 'full',
+        reason: 'Trẻ hợp tác tốt, tiếp tục phiên đánh giá đầy đủ (3 gateway + 5 game riêng = 8 game)'
+      };
+    }
+  }, []);
+
+  // 3. Định nghĩa hàm xử lý kết thúc game
   const handleGameComplete = useCallback((success: boolean) => {
-    if (!ageGroup) return;
+    if (!ageGroup || isSessionEnding) return;
 
-    // Huỷ timer hiện tại
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
 
-    const currentGame = ageGroup.games[currentGameIndex];
+    const currentGame = phase === 'gateway' 
+      ? gatewayGames[currentGameIndex]
+      : currentGames[currentGameIndex];
 
-    // Nếu là gateway game
-    if (currentGame.isGateway) {
-      // Cập nhật kết quả gateway
-      setGatewayResults(prev => {
-        const newResults = [...prev];
-        // Xác định index của gateway này trong mảng gateway (dựa trên thứ tự gateway)
-        const gatewayIndex = ageGroup.games
-          .filter(g => g.isGateway)
-          .findIndex(g => g.id === currentGame.id);
-        if (gatewayIndex !== -1) {
-          newResults[gatewayIndex] = success;
-        }
+    if (!currentGame) return;
 
-        // Nếu đây là gateway cuối cùng (gatewayIndex === tổng số gateway - 1)
-        const gatewayCount = ageGroup.games.filter(g => g.isGateway).length;
-        if (gatewayIndex === gatewayCount - 1) {
-          const successCount = newResults.filter(Boolean).length;
-          if (successCount >= 2) {
-            // Đủ điều kiện: chuyển sang game tiếp theo (nếu còn)
-            if (currentGameIndex < ageGroup.games.length - 1) {
-              setCurrentGameIndex(prevIndex => prevIndex + 1);
-            } else {
-              onSessionEnd(allFeaturesBuffer.current);
-            }
-          } else {
-            // Không đủ điều kiện: kết thúc phiên
-            onSessionEnd(allFeaturesBuffer.current);
-          }
-        } else {
-          // Chưa phải gateway cuối: chuyển sang game tiếp theo
-          setCurrentGameIndex(prevIndex => prevIndex + 1);
-        }
-        return newResults;
-      });
-    } else {
-      // Game tùy chọn: chuyển tiếp bình thường
-      if (currentGameIndex < ageGroup.games.length - 1) {
-        setCurrentGameIndex(prevIndex => prevIndex + 1);
+    console.log(`🎮 Game ${currentGame.id} - ${currentGame.name} completed with success: ${success}`);
+
+    const gameMetrics = calculateGameMetrics(currentGameTime, currentGame.id);
+
+    if (phase === 'gateway') {
+      // Lưu kết quả gateway
+      const gatewayResult: GatewayResult = {
+        gameId: currentGame.id,
+        gameCode: currentGame.id,
+        gameName: currentGame.name,
+        success: success,
+        duration: currentGameTime,
+        completedAt: Date.now(),
+        metrics: gameMetrics
+      };
+      
+      gatewayResultsRef.current = [...gatewayResultsRef.current, gatewayResult];
+      const newGatewayResults = [...gatewayResults, success];
+      setGatewayResults(newGatewayResults);
+
+      console.log(`📊 Gateway progress: ${newGatewayResults.length}/3`);
+
+      // Kiểm tra nếu đã chơi hết 3 gateway games
+      if (newGatewayResults.length === 3) {
+        // Quyết định luồng thích ứng
+        const decision = decideAdaptiveFlow(newGatewayResults);
+        setAdaptiveFlow(decision.decision);
+        
+        const totalGames = decision.decision === 'full' ? 8 : 7;
+        console.log(`📊 Gateway Results: ${decision.successCount}/3 thành công`);
+        console.log(`🔄 Quyết định: ${decision.decision === 'full' ? 'Phiên đầy đủ (8 game)' : 'Phiên rút gọn (7 game)'}`);
+        console.log(`📝 Lý do: ${decision.reason}`);
+
+        // Chuyển sang phase full với số lượng game phù hợp
+        setPhase('full');
+        setCurrentGameIndex(0); // Bắt đầu từ game riêng đầu tiên
       } else {
-        onSessionEnd(allFeaturesBuffer.current);
+        // Chưa hết gateway: chuyển sang gateway tiếp theo
+        setCurrentGameIndex(prev => prev + 1);
+      }
+    } else {
+      // Full phase: kiểm tra nếu là reduced flow thì chỉ chơi 4 game riêng
+      const isLastGame = currentGameIndex >= currentGames.length - 1;
+      
+      if (!isLastGame) {
+        setCurrentGameIndex(prev => prev + 1);
+      } else {
+        // Kết thúc phiên
+        const totalGamesPlayed = gatewayGames.length + currentGames.length;
+        console.log(`✅ Hoàn thành phiên ${adaptiveFlow === 'full' ? 'đầy đủ' : 'rút gọn'} (${totalGamesPlayed} game)`);
+        setIsSessionEnding(true);
+        
+        const sessionResult: SessionResult = {
+          status: 'completed',
+          phase: 'full',
+          adaptiveFlow: adaptiveFlow,
+          gatewayResults: gatewayResultsRef.current,
+          totalGames: ageGroup.games.length,
+          completedGames: totalGamesPlayed,
+          features: [...allFeaturesBuffer.current],
+          summary: calculateSessionSummary(),
+          childId,
+          assessmentId,
+          startedBy: userId,
+          startedAt: sessionStartTimeRef.current,
+          endedAt: Date.now(),
+          deviceInfo: navigator.userAgent,
+          parentAssisted: false,
+          gatewayDecision: decideAdaptiveFlow(gatewayResults)
+        };
+        
+        onSessionEnd(sessionResult);
       }
     }
-  }, [currentGameIndex, ageGroup, onSessionEnd]);
+  }, [
+    currentGameIndex, phase, gatewayResults, gatewayGames, currentGames,
+    ageGroup, onSessionEnd, isSessionEnding, childId, 
+    assessmentId, userId, currentGameTime, calculateGameMetrics, 
+    calculateSessionSummary, decideAdaptiveFlow, adaptiveFlow
+  ]);
 
-  // Cập nhật ref mỗi khi handleGameComplete thay đổi
+  // Cập nhật ref
   useEffect(() => {
     handleGameCompleteRef.current = handleGameComplete;
   }, [handleGameComplete]);
 
-  // 3. Vòng lặp thời gian cho game hiện tại (sử dụng ref để gọi hàm mới nhất)
+  // 4. Vòng lặp thời gian
   useEffect(() => {
-    if (!ageGroup || !ageGroup.games.length) return;
-    const currentGame = ageGroup.games[currentGameIndex];
+    if (!ageGroup || isSessionEnding) return;
+    
+    const games = phase === 'gateway' ? gatewayGames : currentGames;
+    const currentGame = games[currentGameIndex];
+    
+    if (!currentGame) return;
 
     currentGameStartTimeRef.current = Date.now();
     setCurrentGameTime(0);
 
-    // Clear timer cũ nếu có
     if (timerRef.current) clearTimeout(timerRef.current);
 
     const updateTimer = () => {
@@ -355,7 +688,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       setCurrentGameTime(elapsedSeconds);
 
       if (elapsedSeconds >= currentGame.duration) {
-        // Hết giờ -> coi như thất bại (dùng ref để gọi phiên bản mới nhất)
         handleGameCompleteRef.current(false);
       } else {
         timerRef.current = setTimeout(updateTimer, 100);
@@ -366,9 +698,9 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [currentGameIndex, ageGroup]); // Chỉ phụ thuộc vào index và group, không phụ thuộc handleGameComplete
+  }, [currentGameIndex, phase, ageGroup, gatewayGames, currentGames, isSessionEnding]);
 
-  // 4. Khởi tạo camera & inference service
+  // 5. Khởi tạo camera
   useEffect(() => {
     let isMounted = true;
     const initCam = async () => {
@@ -388,38 +720,104 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           setIsCameraInitialized(true);
         }
       } catch (err) {
-        console.error(err);
+        console.error('Lỗi khởi tạo camera:', err);
+        setInferenceStatus('Lỗi camera');
         setIsCameraInitialized(true);
       }
     };
-    setTimeout(initCam, 500);
+    
+    const timeoutId = setTimeout(initCam, 500);
+    
     return () => {
       isMounted = false;
+      clearTimeout(timeoutId);
       inferenceService.dispose();
     };
   }, []);
 
-  // 5. Xử lý feature capture (thêm thông tin game)
+  // 6. Xử lý feature capture
   const handleFeatureCapture = useCallback((feature: BehavioralFeature) => {
-    if (!ageGroup) return;
-    const currentGame = ageGroup.games[currentGameIndex];
-    const enriched = {
+    if (!ageGroup || isSessionEnding) return;
+    
+    const games = phase === 'gateway' ? gatewayGames : currentGames;
+    const currentGame = games[currentGameIndex];
+    
+    const enriched: BehavioralFeature = {
       ...feature,
-      gameId: currentGame.id,
-      sessionTime: Date.now() - gameStartTimeRef.current,
-      childName
+      gameId: currentGame?.id || 'unknown',
+      gameName: currentGame?.name || 'Unknown',
+      phase: phase,
+      adaptiveFlow: adaptiveFlow,
+      sessionTime: Math.floor((Date.now() - sessionStartTimeRef.current) / 1000),
+      childName,
+      childId,
+      assessmentId
     };
+    
     allFeaturesBuffer.current.push(enriched);
     onFeatureCapture(enriched);
-  }, [currentGameIndex, ageGroup, childName, onFeatureCapture]);
+  }, [currentGameIndex, phase, adaptiveFlow, ageGroup, gatewayGames, currentGames, childName, childId, assessmentId, onFeatureCapture, isSessionEnding]);
+
+  // 7. Xử lý unmount
+  useEffect(() => {
+    return () => {
+      if (!isSessionEnding && allFeaturesBuffer.current.length > 0) {
+        const abortResult: SessionResult = {
+          status: 'aborted',
+          reason: 'user_cancelled',
+          phase: phase,
+          adaptiveFlow: adaptiveFlow,
+          gatewayResults: gatewayResultsRef.current,
+          totalGames: ageGroup?.games.length || 0,
+          completedGames: phase === 'gateway' ? gatewayResults.length : gatewayGames.length + currentGames.length,
+          features: [...allFeaturesBuffer.current],
+          summary: calculateSessionSummary(),
+          childId,
+          assessmentId,
+          startedBy: userId,
+          startedAt: sessionStartTimeRef.current,
+          endedAt: Date.now(),
+          deviceInfo: navigator.userAgent,
+          parentAssisted: false
+        };
+        
+        onSessionEnd(abortResult);
+      }
+    };
+  }, [isSessionEnding, phase, adaptiveFlow, gatewayResults.length, currentGames.length, gatewayGames.length, ageGroup, childId, assessmentId, userId, onSessionEnd, calculateSessionSummary]);
 
   if (!config || !ageGroup) {
-    return <div style={{ padding: 20 }}>Đang tải cấu hình...</div>;
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        fontSize: '18px',
+        color: '#64748b',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      }}>
+        <div className="loading-pulse">
+          ⏳ Đang tải cấu hình trò chơi...
+        </div>
+      </div>
+    );
   }
 
-  const CurrentGameComponent = ageGroup.games[currentGameIndex]?.component;
-  const currentGame = ageGroup.games[currentGameIndex];
-  const totalSessionTime = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
+  const currentGame = currentGames[currentGameIndex];
+  const totalSessionTime = Math.floor((Date.now() - sessionStartTimeRef.current) / 1000);
+  const totalGamesCount = getTotalGamesCount();
+  const completedGames = getCompletedGamesCount();
+
+  // Xác định phase display name
+  const getPhaseDisplayName = () => {
+    if (phase === 'gateway') return '🔷 GATEWAY (3 GAME)';
+    
+    const totalGames = gatewayGames.length + currentGames.length;
+    return adaptiveFlow === 'full' 
+      ? `✨ ĐẦY ĐỦ (${totalGames} GAME)` 
+      : `🔹 RÚT GỌN (${totalGames} GAME)`;
+  };
 
   return (
     <div className="game-engine-container">
@@ -430,58 +828,136 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
       {/* Khu vực chính hiển thị game */}
       <div className="game-content">
-        {CurrentGameComponent && (
-          <CurrentGameComponent
+        {currentGame?.component && (
+          <currentGame.component
             config={config}
             latestAIResult={latestAIResult}
             onFeatureCapture={handleFeatureCapture}
             timeElapsed={currentGameTime}
             childName={childName}
-            gameDuration={currentGame?.duration || 120}
-            onGameComplete={handleGameComplete}  // Cho phép game tự báo kết thúc
+            gameDuration={currentGame.duration}
+            onGameComplete={handleGameComplete}
           />
         )}
       </div>
 
+      {/* Overlay thông tin */}
+      {phase !== 'gateway' && (
+        <div className="game-info-overlay">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <div className="gateway-summary">
+              <span>Gateway:</span>
+              {gatewayResults.map((result, idx) => (
+                <span
+                  key={idx}
+                  style={{
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    backgroundColor: result ? '#10b981' : '#ef4444',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '12px',
+                    color: 'white'
+                  }}
+                >
+                  {idx + 1}
+                </span>
+              ))}
+            </div>
+            <div>
+              {adaptiveFlow === 'full' 
+                ? '🎯 3 Gateway + 5 game chuyên sâu = 8 game' 
+                : '📋 3 Gateway + 4 game cốt lõi = 7 game'}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Thanh trạng thái */}
       <div className="game-status-bar">
-        <span>{isCameraInitialized ? `👁️ AI: ${inferenceStatus}` : '⏳ Camera...'}</span>
+        <span>
+          <span className={`phase-badge ${phase === 'gateway' ? 'phase-gateway' : adaptiveFlow === 'full' ? 'phase-full' : 'phase-reduced'}`}>
+            {getPhaseDisplayName()}
+          </span>
+        </span>
+        
+        {phase === 'gateway' && gatewayResults.length > 0 && (
+          <span>
+            Kết quả: 
+            {gatewayResults.map((result, idx) => (
+              <span
+                key={idx}
+                className={`gateway-result ${
+                  result === true ? 'gateway-success' : 
+                  result === false ? 'gateway-failure' : 'gateway-pending'
+                }`}
+                title={`Game ${idx + 1}: ${result ? 'Thành công' : 'Thất bại'}`}
+              />
+            ))}
+          </span>
+        )}
+        
+        {phase !== 'gateway' && gatewayResults.length > 0 && (
+          <span>
+            <span style={{ color: '#10b981' }}>✓ {gatewayResults.filter(r => r).length}/3 gateway</span>
+            <span style={{ marginLeft: '8px', color: adaptiveFlow === 'full' ? '#10b981' : '#f59e0b' }}>
+              {adaptiveFlow === 'full' ? '✨ Full (8 game)' : '🔹 Reduced (7 game)'}
+            </span>
+          </span>
+        )}
+        
         <span>|</span>
-        <span>Nhóm: {age} tháng</span>
+        <span>{isCameraInitialized ? `👁️ AI: ${inferenceStatus}` : '⏳ Đang khởi tạo camera...'}</span>
         <span>|</span>
-        <span>Game: {currentGame?.id} - {currentGame?.name}</span>
+        <span>🧒 {childName || "Bé yêu"}</span>
         <span>|</span>
-        <span>Bé: {childName || "Chưa đặt tên"}</span>
+        <span>🎮 {currentGame?.name}</span>
         <span>|</span>
-        <span>Thời gian: {currentGameTime}s / {currentGame?.duration}s</span>
+        <span>⏱️ {currentGameTime}s / {currentGame?.duration}s</span>
         <span>|</span>
-        <span>Tổng: {totalSessionTime}s</span>
+        <span>📊 {completedGames}/{totalGamesCount}</span>
       </div>
 
-      {/* Thanh tiến trình */}
+      {/* Thanh tiến trình tổng thể */}
       <div className="game-progress-container">
         <div
           className="game-progress-fill"
-          style={{ width: `${(currentGameTime / (currentGame?.duration || 1)) * 100}%` }}
+          style={{ 
+            width: `${(completedGames / totalGamesCount) * 100}%` 
+          }}
         />
       </div>
 
       {/* Nút điều hướng (debug) */}
-      <div className="game-nav-bar">
-        {ageGroup.games.map((game, index) => (
-          <button
-            key={game.id}
-            className={`nav-btn ${index === currentGameIndex ? 'active' : 'inactive'}`}
-            onClick={() => {
-              // Chỉ cho phép nhảy nếu không quá xa (giữ logic cũ)
-              if (index <= currentGameIndex + 1) setCurrentGameIndex(index);
-            }}
-            disabled={index > currentGameIndex + 1}
-          >
-            {game.name} {game.isGateway ? '🔷' : '✨'}
-          </button>
-        ))}
-      </div>
+      {process.env.NODE_ENV === 'development' && (
+        <div className="game-nav-bar">
+          {ageGroup.games.map((game, index) => {
+            const isGateway = index < 3;
+            const isPlayed = index < (phase === 'gateway' ? currentGameIndex : gatewayGames.length + currentGameIndex);
+            const isCurrent = index === (phase === 'gateway' ? currentGameIndex : gatewayGames.length + currentGameIndex);
+            const isInReduced = !isGateway && adaptiveFlow === 'reduced' && index >= 7; // Game thứ 5 của nhóm (index 7) không được chơi trong reduced flow
+            
+            if (isInReduced) {
+              return null;
+            }
+            
+            return (
+              <button
+                key={game.id}
+                className={`nav-btn ${isCurrent ? 'active' : isPlayed ? 'played' : 'inactive'}`}
+                style={{
+                  opacity: isPlayed || isCurrent ? 1 : 0.7
+                }}
+                disabled
+              >
+                {game.name} {isGateway ? '🔷' : '✨'}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

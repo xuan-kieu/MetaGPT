@@ -1,34 +1,49 @@
 import axios from 'axios';
 
-// Tạo instance axios với baseURL từ biến môi trường hoặc fallback
+// Tạo instance axios với baseURL
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  timeout: 10000, // 10 giây timeout
 });
 
-// Interceptor cho request: tự động thêm token vào header Authorization
+// Interceptor cho request
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    console.log(`🚀 ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`, config.data);
     return config;
   },
   (error) => {
+    console.error('❌ Request error:', error);
     return Promise.reject(error);
   }
 );
 
-// Interceptor cho response: xử lý lỗi 401 (Unauthorized)
+// Interceptor cho response
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log(`✅ ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`);
+    return response;
+  },
   (error) => {
+    console.error('❌ Response error:', {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
+    
     if (error.response?.status === 401) {
-      // Token không hợp lệ hoặc hết hạn -> xóa token và chuyển về login
+      // Token không hợp lệ hoặc hết hạn
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      // Không tự động redirect ở đây, để component xử lý
     }
+    
     return Promise.reject(error);
   }
 );

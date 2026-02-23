@@ -1,4 +1,3 @@
-// types.ts
 // ============================================
 // CÁC INTERFACE LIÊN QUAN ĐẾN DATABASE (SQL)
 // ============================================
@@ -184,7 +183,7 @@ export interface InterventionPlan {
 }
 
 // ============================================
-// CÁC INTERFACE UI HIỆN CÓ
+// CÁC INTERFACE UI VÀ GATEWAY GAMES (ĐÃ CẬP NHẬT)
 // ============================================
 
 export enum AppMode {
@@ -215,6 +214,9 @@ export interface AudioFeatures {
   pitch?: number;
 }
 
+export type SessionPhase = 'gateway' | 'full';
+export type AdaptiveFlow = 'full' | 'reduced';
+
 export interface BehavioralFeature {
   timestamp: number;
   gazeX: number;
@@ -233,8 +235,13 @@ export interface BehavioralFeature {
   audioStimulus?: string | null;
   isLookingAtTarget?: boolean;
   gameId?: string;
+  gameName?: string;  // Thêm trường này
+  phase?: SessionPhase;
+  adaptiveFlow?: AdaptiveFlow;  // Thêm trường này
   sessionTime?: number;
   childName?: string;
+  childId?: string;
+  assessmentId?: string;
   faceLandmarks?: Landmark[];
   poseLandmarks?: Landmark[];
   handLandmarks?: Landmark[][];
@@ -313,13 +320,83 @@ export interface GameConfig {
   theme: GameTheme;
 }
 
+export interface GatewayResult {
+  gameId: string;
+  gameCode: string;
+  gameName: string;
+  success: boolean;
+  duration: number;
+  completedAt: number;
+  metrics?: {
+    attentionLevel: number;
+    engagementScore: number;
+    smileIntensity: number;
+    gazeStability: number;
+    [key: string]: any;
+  };
+}
+
+export interface GatewayDecision {
+  successCount: number;
+  totalGames: number;
+  decision: AdaptiveFlow;
+  reason: string;
+}
+
+export interface SessionSummary {
+  attentionScore?: number;
+  socialEngagement?: number;
+  cognitiveScore?: number;
+  motorScore?: number;
+  languageScore?: number;
+  gazeStability?: number;
+  smileFrequency?: number;
+  vocalizationRate?: number;
+  gatewaySuccessRate?: number;
+  averageAttention?: number;
+  averageSmile?: number;
+  totalDuration?: number;
+  adaptiveFlow?: AdaptiveFlow;  // Thêm trường này
+  totalGamesPlayed?: number;    // Thêm trường này
+  gatewayResults?: GatewayResult[];  // Thêm trường này
+  [key: string]: any;
+}
+
+export interface SessionResult {
+  status: 'completed' | 'incomplete' | 'aborted';
+  reason?: 'low_engagement' | 'user_cancelled' | 'error' | 'timeout';
+  phase: SessionPhase;
+  adaptiveFlow?: AdaptiveFlow;  // Thêm trường này
+  gatewayResults?: GatewayResult[];
+  gatewayDecision?: GatewayDecision;  // Thêm trường này
+  totalGames: number;
+  completedGames: number;
+  features: BehavioralFeature[];
+  summary?: SessionSummary;
+  
+  // Liên kết với database
+  assessmentId?: string;
+  childId?: string;
+  startedBy?: string;
+  
+  // Metadata
+  startedAt: number;
+  endedAt: number;
+  deviceInfo?: string;
+  environmentNotes?: string;
+  parentAssisted?: boolean;
+}
+
 export interface GameEngineProps {
   age: number;
   themeId: string;
   specificAsset: string | null;
   childName: string;
+  childId?: string;
+  assessmentId?: string;
+  userId?: string;
   onFeatureCapture: (feature: BehavioralFeature) => void;
-  onSessionEnd: (features: BehavioralFeature[]) => void;
+  onSessionEnd: (result: SessionResult) => void;
   gameId?: string;
   gameTitle?: string;
   gameDuration?: number;
@@ -328,16 +405,14 @@ export interface GameEngineProps {
 export interface GameModule {
   id: string;
   name: string;
-  duration: string;
-  isOptional?: boolean;
+  duration: number;
+  isGateway: boolean;
+  isOptional: boolean;
+  component: React.ComponentType<any>;
 }
 
 export interface AgeGroupConfig {
-  id: string;
-  label: string;
-  description: string;
-  targetTime: string;
-  numericAge: number;
+  totalDuration: number;
   games: GameModule[];
 }
 
@@ -420,3 +495,5 @@ export interface ClinicalReport {
   };
   disclaimer: string;
 }
+
+

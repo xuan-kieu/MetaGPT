@@ -18,9 +18,10 @@ interface ChildProfileData {
 
 interface ChildProfileProps {
   onComplete?: (childData: ChildProfileData) => void;
+  isNewUser?: boolean;
 }
 
-const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
+const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete, isNewUser = false }) => {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<ChildProfileData>({
     name: '',
@@ -117,10 +118,9 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
     setError('');
     
     try {
-      // Lấy user ID từ localStorage - thử nhiều cách
+      // Lấy user ID từ localStorage
       let userId = localStorage.getItem('neuropath_user_id');
       
-      // Nếu không có, thử lấy từ user object
       if (!userId) {
         const userStr = localStorage.getItem('user');
         if (userStr) {
@@ -144,25 +144,22 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
       // Tìm user trong DB
       let dbUser = db.getUserById(userId);
       
-      // Nếu không tìm thấy, thử tạo lại user từ thông tin trong localStorage
+      // Nếu không tìm thấy, tạo lại user
       if (!dbUser) {
-        console.log('⚠️ User not found in DB, attempting to recreate from localStorage');
+        console.log('⚠️ User not found in DB, recreating...');
         
         const userStr = localStorage.getItem('user');
         if (userStr) {
           try {
             const userData = JSON.parse(userStr);
-            
-            // Tạo lại user trong DB
             dbUser = db.createUser({
               username: userData.email?.split('@')[0] || `user_${Date.now()}`,
               password_hash: 'hashed_password_demo',
               email: userData.email,
               phone: null,
               full_name: userData.full_name || userData.name || 'User',
-              role: userData.role || 'parent',
+              role: 'parent',
             });
-            
             console.log('✅ User recreated in DB:', dbUser);
           } catch (e) {
             console.error('Error recreating user:', e);
@@ -173,7 +170,7 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
       console.log('👤 DB User found:', dbUser);
       
       if (!dbUser) {
-        setError('Không tìm thấy thông tin người dùng trong cơ sở dữ liệu. Vui lòng đăng nhập lại.');
+        setError('Không thể xác thực người dùng. Vui lòng đăng nhập lại.');
         setTimeout(() => navigate('/login'), 2000);
         return;
       }
@@ -223,7 +220,7 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
       localStorage.setItem('neuropath_child_id', newDbChild.id);
       localStorage.setItem('current_child', JSON.stringify(childData));
 
-      // Gọi callback onComplete nếu có
+      // Gọi callback onComplete để App biết đã tạo child xong
       if (onComplete) {
         onComplete(childData);
       }
@@ -239,8 +236,15 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete }) => {
   return (
     <div className="child-profile-container">
       <div className="profile-card">
-        <h2 className="profile-title">Thêm hồ sơ trẻ</h2>
-        <p className="profile-subtitle">Vui lòng cung cấp thông tin chi tiết về trẻ</p>
+        <h2 className="profile-title">
+          {isNewUser ? '🎉 Chào mừng bạn đến với NeuroPath!' : 'Thêm hồ sơ trẻ'}
+        </h2>
+        <p className="profile-subtitle">
+          {isNewUser 
+            ? 'Để bắt đầu, vui lòng tạo hồ sơ cho bé yêu của bạn' 
+            : 'Vui lòng cung cấp thông tin chi tiết về trẻ'
+          }
+        </p>
         
         {error && (
           <div className="error-message" style={{

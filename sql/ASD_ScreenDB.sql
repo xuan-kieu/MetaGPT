@@ -5,6 +5,7 @@ Tính năng: Admin, Specialist, Parent, Assessment, Games, Reset Password
 ============================================================================
 */
 
+
 -- 1. BẢNG NGƯỜI DÙNG (users)
 CREATE TABLE users (
     id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),

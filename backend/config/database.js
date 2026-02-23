@@ -1,34 +1,44 @@
 const sql = require('mssql');
 require('dotenv').config();
 
+// Cấu hình tối ưu cho SQL Server Express
 const config = {
-    server: process.env.DB_SERVER,
-    database: process.env.DB_DATABASE,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
+    // Thay vì dùng IP, ta dùng đường dẫn instance
+    server: 'localhost\\SQLEXPRESS01', 
+    database: 'ASD_Screening',
+    user: 'sa',
+    password: 'MatKhau@123456!',
     options: {
-        encrypt: true, // Bật nếu dùng Azure SQL
-        trustServerCertificate: true // Tắt kiểm tra chứng chỉ cho local dev
+        encrypt: false,
+        trustServerCertificate: true,
     }
 };
 
 let pool = null;
 
-/**
- * Lấy kết nối pool (singleton)
- * @returns {Promise<sql.ConnectionPool>}
- */
 async function getConnection() {
     try {
-        if (pool) {
-            console.log('Sử dụng lại kết nối pool hiện có');
+        // Nếu đã có kết nối và vẫn đang mở thì dùng lại
+        if (pool && pool.connected) {
             return pool;
         }
+        
+        console.log('🔄 Đang kết nối đến SQL Server (127.0.0.1:1433)...');
+        
         pool = await sql.connect(config);
-        console.log('Kết nối SQL Server thành công');
+        
+        console.log('✅ Kết nối SQL Server thành công!');
         return pool;
     } catch (err) {
-        console.error('Lỗi kết nối database:', err);
+        console.error('❌ Lỗi kết nối database:', err.message);
+        
+        // Giải thích lỗi phổ biến
+        if (err.message.includes('Login failed')) {
+            console.error('👉 Gợi ý: Kiểm tra lại User sa và Mật khẩu.');
+        } else if (err.code === 'ETIMEOUT') {
+            console.error('👉 Gợi ý: Kiểm tra xem SQL Server đã được Restart chưa.');
+        }
+        
         throw err;
     }
 }

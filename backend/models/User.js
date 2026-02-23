@@ -126,6 +126,37 @@ class User {
             .query('DELETE FROM users WHERE id = @id');
         return result.rowsAffected[0] > 0;
     }
+    /**
+     * Tìm user theo username
+     * @param {string} username
+     * @returns {Promise<object|null>}
+     */
+    static async findByUsername(username) {
+        const pool = await getConnection();
+        const result = await pool.request()
+            .input('username', sql.NVarChar, username)
+            .query(`
+                SELECT id, username, email, phone, full_name, role, created_at
+                FROM users WHERE username = @username
+            `);
+        return result.recordset[0] || null;
+    }
+
+    /**
+     * Tìm user theo id kèm password hash
+     * @param {string} id
+     * @returns {Promise<object|null>}
+     */
+    static async findByIdWithPassword(id) {
+        const pool = await getConnection();
+        const result = await pool.request()
+            .input('id', sql.UniqueIdentifier, id)
+            .query(`
+                SELECT id, username, email, phone, full_name, role, password_hash, created_at
+                FROM users WHERE id = @id
+            `);
+        return result.recordset[0] || null;
+    }
 }
 
 module.exports = User;
