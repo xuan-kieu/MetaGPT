@@ -11,7 +11,7 @@ const { generateToken } = require('../utils/tokenGenerator');
  */
 exports.register = async (req, res) => {
     try {
-        const { username, email, password, phone, full_name, role } = req.body;
+        const { username, email, password, full_name, role } = req.body;
 
         // Kiểm tra dữ liệu đầu vào
         const errors = [];

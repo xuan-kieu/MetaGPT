@@ -1,16 +1,14 @@
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-// Tạo transporter
+// Tạo transporter với cấu hình chuẩn cho Outlook
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // true cho 465, false cho các port khác
+    service: 'gmail',
     auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    }
-});
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
 
 /**
  * Gửi email reset password

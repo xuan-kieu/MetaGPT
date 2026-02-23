@@ -25,7 +25,7 @@ exports.getAllUsers = async (req, res) => {
  */
 exports.createUser = async (req, res) => {
     try {
-        const { username, email, phone, full_name, role, password } = req.body;
+        const { username, email, full_name, role, password } = req.body;
 
         // Kiểm tra email đã tồn tại chưa
         const existingUser = await User.findByEmail(email);
@@ -40,7 +40,6 @@ exports.createUser = async (req, res) => {
         const userId = await User.create({
             username,
             email,
-            phone,
             full_name,
             role,
             password_hash: hashedPassword
@@ -60,7 +59,7 @@ exports.createUser = async (req, res) => {
 exports.updateUser = async (req, res) => {
     try {
         const { id } = req.params;
-        const { username, email, phone, full_name, role } = req.body;
+        const { username, email, full_name, role } = req.body;
 
         // Kiểm tra user tồn tại
         const user = await User.findById(id);
@@ -68,7 +67,7 @@ exports.updateUser = async (req, res) => {
             return res.status(404).json({ error: 'Không tìm thấy người dùng' });
         }
 
-        await User.update(id, { username, email, phone, full_name, role });
+        await User.update(id, { username, email, full_name, role });
         res.json({ message: 'Cập nhật thành công' });
     } catch (err) {
         console.error('Lỗi cập nhật user:', err);

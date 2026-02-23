@@ -290,22 +290,24 @@ GO-- ===========================================================================
 -- Lưu ý: Trong thực tế, 'password_hash' phải là chuỗi đã được mã hóa (bcrypt/argon2) từ Backend.
 -- Dưới đây là ví dụ để bạn có dữ liệu test trong DB.
 
-INSERT INTO users (username, password_hash, email, full_name, role, is_active)
+INSERT INTO users (username, password_hash, email, phone, full_name, role, is_active)
 VALUES (
     'admin', 
     '$2b$10$YourHashedPasswordExample', -- Chuỗi hash mẫu
     'admin@asdscreen.com', 
+    '0901234567', -- Số điện thoại của Admin
     N'Quản trị viên hệ thống', 
     'admin', 
     1
 );
 
 -- Thêm một chuyên gia mẫu để test tính năng Chuyên gia
-INSERT INTO users (username, password_hash, email, full_name, role, is_active)
+INSERT INTO users (username, password_hash, email, phone, full_name, role, is_active)
 VALUES (
     'bacsi_minh', 
     '$2b$10$YourHashedPasswordExample', 
     'minh.nguyen@clinic.com', 
+    '0987654321', -- Số điện thoại của Bác sĩ Minh
     N'BS. Nguyễn Văn Minh', 
     'specialist', 
     1

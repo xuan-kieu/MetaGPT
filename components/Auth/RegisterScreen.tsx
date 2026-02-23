@@ -11,6 +11,7 @@ interface RegisterScreenProps {
 interface ValidationErrors {
   username?: string;
   email?: string;
+  phone?: string;
   password?: string;
   confirmPassword?: string;
   fullName?: string;
@@ -21,6 +22,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin }) => {
   const [formData, setFormData] = useState({
     username: '',
     email: '',
+    phone: '',
     password: '',
     confirmPassword: '',
     fullName: ''
@@ -55,6 +57,17 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin }) => {
         }
         return '';
 
+      case 'phone':
+        if (!value.trim()) {
+          return ''; // Phone có thể để trống vì trong SQL không có NOT NULL
+        }
+        // Regex cho số điện thoại Việt Nam
+        const phoneRegex = /^(0|\+84)(3|5|7|8|9)[0-9]{8}$/;
+        if (!phoneRegex.test(value.replace(/\s/g, ''))) {
+          return 'Số điện thoại không đúng định dạng (VD: 0912345678 hoặc +84912345678)';
+        }
+        return '';
+
       case 'password':
         if (!value) return 'Mật khẩu không được để trống';
         if (value.length < 6) return 'Mật khẩu phải có ít nhất 6 ký tự';
@@ -77,6 +90,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin }) => {
     newErrors.fullName = validateField('fullName', formData.fullName);
     newErrors.username = validateField('username', formData.username);
     newErrors.email = validateField('email', formData.email);
+    newErrors.phone = validateField('phone', formData.phone);
     newErrors.password = validateField('password', formData.password);
     newErrors.confirmPassword = validateField('confirmPassword', formData.confirmPassword);
 
@@ -125,13 +139,21 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin }) => {
     try {
       console.log('🔐 Bắt đầu đăng ký với email:', formData.email);
       
-      const data = await register({
+      // Chuẩn bị dữ liệu đăng ký, chỉ gửi phone nếu có giá trị
+      const registerData: any = {
         username: formData.username.trim(),
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
         full_name: formData.fullName.trim(),
         role: 'parent'
-      });
+      };
+
+      // Chỉ thêm phone vào request nếu có giá trị
+      if (formData.phone.trim()) {
+        registerData.phone = formData.phone.trim();
+      }
+      
+      const data = await register(registerData);
 
       console.log('✅ Đăng ký thành công:', data);
 
@@ -141,7 +163,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin }) => {
       
       // Chuyển hướng sau khi đăng ký thành công
       setTimeout(() => {
-        navigate('//create-child-profile');
+        navigate('/create-child-profile');
       }, 100);
       
     } catch (err: any) {
@@ -290,6 +312,43 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin }) => {
                 marginTop: '0.25rem'
               }}>
                 ⚠️ {errors.email}
+              </div>
+            )}
+          </div>
+
+          {/* Số điện thoại (Mới thêm) */}
+          <div className="form-group">
+            <label htmlFor="phone">
+              Số điện thoại <span style={{ color: '#64748b', fontSize: '0.8rem' }}>(Không bắt buộc)</span>
+            </label>
+            <input
+              type="tel"
+              id="phone"
+              name="phone"
+              value={formData.phone}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              placeholder="0912345678 hoặc +84912345678"
+              disabled={loading}
+              className={getInputClassName('phone')}
+              style={touched.phone && errors.phone ? { borderColor: '#dc2626' } : {}}
+            />
+            {touched.phone && errors.phone && (
+              <div className="field-error" style={{
+                color: '#dc2626',
+                fontSize: '0.8rem',
+                marginTop: '0.25rem'
+              }}>
+                ⚠️ {errors.phone}
+              </div>
+            )}
+            {!errors.phone && (
+              <div style={{
+                color: '#64748b',
+                fontSize: '0.75rem',
+                marginTop: '0.25rem'
+              }}>
+                Nhập số điện thoại Việt Nam (bắt đầu bằng 0 hoặc +84)
               </div>
             )}
           </div>

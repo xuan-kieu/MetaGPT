@@ -64,7 +64,7 @@ const startServer = async () => {
         }
 
         // Khởi động server
-        app.listen(PORT, () => {
+        app.listen(PORT, '0.0.0.0', () => {
             console.log(`🚀 Server đang chạy tại port ${PORT}`);
             console.log(`📝 Môi trường: ${process.env.NODE_ENV}`);
             console.log(`🔗 Client URL: ${process.env.CLIENT_URL}`);
@@ -74,33 +74,4 @@ const startServer = async () => {
         process.exit(1);
     }
 };
-const sql = require('mssql');
-
-const config = {
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  server: process.env.DB_SERVER,
-  database: process.env.DB_NAME,
-  options: {
-    encrypt: true,
-    trustServerCertificate: false
-  }
-};
-
-sql.connect(config)
-  .then(() => console.log("Connected to Azure SQL"))
-  .catch(err => console.log(err));
 startServer();
-
-// Xử lý graceful shutdown
-process.on('SIGINT', async () => {
-    console.log('🛑 Đang tắt server...');
-    process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-    console.log('🛑 Nhận tín hiệu SIGTERM, đang tắt server...');
-    process.exit(0);
-});
-
-module.exports = app; // Export cho testing
