@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Tạo instance axios với baseURL
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: import.meta.env.VITE_API_URL,
   timeout: 10000, // 10 giây timeout
 });
 
