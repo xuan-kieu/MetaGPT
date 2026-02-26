@@ -1,7 +1,9 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { getConnection } = require('./config/database');
+
+// 1. ĐÃ SỬA: Lấy poolPromise thay vì getConnection
+const { poolPromise } = require('./config/database'); 
 const { verifyConnection } = require('./utils/emailService');
 
 // Import routes
@@ -54,11 +56,13 @@ app.use((err, req, res, next) => {
 // Khởi động server và kiểm tra kết nối
 const startServer = async () => {
     try {
-        // ❌ KHÔNG await nữa
-        getConnection()
-          .then(() => console.log('✅ Kết nối database thành công'))
+        // 2. ĐÃ SỬA: Sử dụng poolPromise thay vì gọi hàm getConnection()
+        // Vì file database đã in ra '✅ Kết nối database thành công' rồi, 
+        // ở đây chúng ta chỉ cần xác nhận lại là hệ thống đã sẵn sàng.
+        poolPromise
+          .then(() => console.log('✅ Hệ thống Database đã sẵn sàng nhận truy vấn'))
           .catch(err => {
-              console.error('❌ Lỗi kết nối database:', err.message);
+              console.error('❌ Lỗi Pool Database:', err.message);
           });
 
         console.log("⏭ Bỏ qua kiểm tra email khi khởi động");
@@ -72,7 +76,7 @@ const startServer = async () => {
 
     } catch (error) {
         console.error('❌ Không thể khởi động server:', error);
-        // ❌ ĐÃ XÓA process.exit(1)
     }
 };
+
 startServer();

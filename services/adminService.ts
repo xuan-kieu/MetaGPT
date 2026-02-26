@@ -1,5 +1,7 @@
 import api from './api';
 
+// --- Interfaces ---
+
 export interface User {
   id: string;
   username: string;
@@ -50,37 +52,77 @@ export interface Game {
   created_at: string;
 }
 
+export interface RecentActivity {
+  description: string;
+  created_at: string;
+  user_id?: string;
+}
+
 export interface SystemStats {
   total_users: number;
   total_children: number;
   total_assessments: number;
-  assessments_by_risk: { risk_level: string; count: number }[];
-  recent_activities: any[];
+  assessments_by_risk: { 
+    risk_level: string; 
+    count: number 
+  }[];
+  recent_activities: RecentActivity[];
 }
 
-// Users
-export const getUsers = () => api.get('/admin/users').then(res => res.data);
-export const createUser = (data: Partial<User> & { password: string }) => api.post('/admin/users', data).then(res => res.data);
-export const updateUser = (id: string, data: Partial<User>) => api.put(`/admin/users/${id}`, data).then(res => res.data);
-export const deleteUser = (id: string) => api.delete(`/admin/users/${id}`).then(res => res.data);
+// --- API Functions ---
 
-// Children
-export const getAllChildren = () => api.get('/admin/children').then(res => res.data);
-export const createChild = (data: Partial<Child>) => api.post('/admin/children', data).then(res => res.data);
-export const updateChild = (id: string, data: Partial<Child>) => api.put(`/admin/children/${id}`, data).then(res => res.data);
-export const deleteChild = (id: string) => api.delete(`/admin/children/${id}`).then(res => res.data);
+// Users Management
+export const getUsers = (): Promise<User[]> => 
+  api.get('/admin/users').then(res => res.data);
 
-// Norms
-export const getNorms = () => api.get('/admin/norms').then(res => res.data);
-export const createNorm = (data: Partial<Norm>) => api.post('/admin/norms', data).then(res => res.data);
-export const updateNorm = (id: number, data: Partial<Norm>) => api.put(`/admin/norms/${id}`, data).then(res => res.data);
-export const deleteNorm = (id: number) => api.delete(`/admin/norms/${id}`).then(res => res.data);
+export const createUser = (data: Partial<User> & { password: string }): Promise<User> => 
+  api.post('/admin/users', data).then(res => res.data);
 
-// Games
-export const getGames = () => api.get('/admin/games').then(res => res.data);
-export const createGame = (data: Partial<Game>) => api.post('/admin/games', data).then(res => res.data);
-export const updateGame = (id: number, data: Partial<Game>) => api.put(`/admin/games/${id}`, data).then(res => res.data);
-export const deleteGame = (id: number) => api.delete(`/admin/games/${id}`).then(res => res.data);
+export const updateUser = (id: string, data: Partial<User>): Promise<User> => 
+  api.put(`/admin/users/${id}`, data).then(res => res.data);
 
-// Stats
-export const getSystemStats = () => api.get('/admin/stats').then(res => res.data);
+export const deleteUser = (id: string): Promise<{ message: string }> => 
+  api.delete(`/admin/users/${id}`).then(res => res.data);
+
+// Children Management
+export const getAllChildren = (): Promise<Child[]> => 
+  api.get('/admin/children').then(res => res.data);
+
+export const createChild = (data: Partial<Child>): Promise<Child> => 
+  api.post('/admin/children', data).then(res => res.data);
+
+export const updateChild = (id: string, data: Partial<Child>): Promise<Child> => 
+  api.put(`/admin/children/${id}`, data).then(res => res.data);
+
+export const deleteChild = (id: string): Promise<{ message: string }> => 
+  api.delete(`/admin/children/${id}`).then(res => res.data);
+
+// Norms Management (Quy chuẩn)
+export const getNorms = (): Promise<Norm[]> => 
+  api.get('/admin/norms').then(res => res.data);
+
+export const createNorm = (data: Partial<Norm>): Promise<Norm> => 
+  api.post('/admin/norms', data).then(res => res.data);
+
+export const updateNorm = (id: number, data: Partial<Norm>): Promise<Norm> => 
+  api.put(`/admin/norms/${id}`, data).then(res => res.data);
+
+export const deleteNorm = (id: number): Promise<{ message: string }> => 
+  api.delete(`/admin/norms/${id}`).then(res => res.data);
+
+// Games Management
+export const getGames = (): Promise<Game[]> => 
+  api.get('/admin/games').then(res => res.data);
+
+export const createGame = (data: Partial<Game>): Promise<Game> => 
+  api.post('/admin/games', data).then(res => res.data);
+
+export const updateGame = (id: number, data: Partial<Game>): Promise<Game> => 
+  api.put(`/admin/games/${id}`, data).then(res => res.data);
+
+export const deleteGame = (id: number): Promise<{ message: string }> => 
+  api.delete(`/admin/games/${id}`).then(res => res.data);
+
+// System Statistics
+export const getSystemStats = (): Promise<SystemStats> => 
+  api.get('/admin/stats').then(res => res.data);

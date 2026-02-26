@@ -3,7 +3,7 @@ console.log("API URL:", import.meta.env.VITE_API_URL);
 // Tạo instance axios với baseURL
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
-  timeout: 10000, // 10 giây timeout
+  timeout: 30000, // 10 giây timeout
 });
 
 // Interceptor cho request

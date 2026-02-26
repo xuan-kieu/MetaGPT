@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as db from '../../services/dbService';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext'; // 👈 ĐÃ THÊM USEAUTH Ở ĐÂY
 import '../../styles.css';
 
 interface ChildProfileData {
@@ -19,10 +20,20 @@ interface ChildProfileData {
 interface ChildProfileProps {
   onComplete?: (childData: ChildProfileData) => void;
   isNewUser?: boolean;
+  editingData?: ChildProfileData | null;
+  onCancel?: () => void;
 }
 
-const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete, isNewUser = false }) => {
+const ChildProfile: React.FC<ChildProfileProps> = ({ 
+  onComplete, 
+  isNewUser = false, 
+  editingData, 
+  onCancel 
+}) => {
   const navigate = useNavigate();
+  const { currentUser } = useAuth(); // 👈 LẤY THÔNG TIN USER TỪ CONTEXT
+  
+  // State khởi tạo với giá trị mặc định
   const [profile, setProfile] = useState<ChildProfileData>({
     name: '',
     gender: 'male',
@@ -34,6 +45,36 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete, isNewUser = fal
   const [calculatedAge, setCalculatedAge] = useState<{years: number; months: number} | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // QUAN TRỌNG: useEffect để đồng bộ khi editingData thay đổi
+  useEffect(() => {
+    if (editingData) {
+      // Nếu có editingData, nạp dữ liệu vào form
+      setProfile({
+        id: editingData.id,
+        name: editingData.name || '',
+        gender: editingData.gender || 'male',
+        birthDate: editingData.birthDate || '',
+        region: editingData.region || '',
+        primaryLanguage: editingData.primaryLanguage || 'vi'
+      });
+      
+      // Chủ động tính lại tuổi ngay khi nạp editingData
+      if (editingData.birthDate) {
+        calculateAge(editingData.birthDate);
+      }
+    } else {
+      // Nếu không có editingData, reset về mặc định
+      setProfile({
+        name: '',
+        gender: 'male',
+        birthDate: '',
+        region: '',
+        primaryLanguage: 'vi'
+      });
+      setCalculatedAge(null);
+    }
+  }, [editingData]);
 
   // Danh sách vùng miền Việt Nam
   const regions = [
@@ -53,26 +94,30 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete, isNewUser = fal
     { value: 'other', label: 'Ngôn ngữ khác' }
   ];
 
-  // Tính tuổi tự động khi ngày sinh thay đổi
-  useEffect(() => {
-    if (profile.birthDate) {
-      calculateAge(profile.birthDate);
+  // HÀM TÍNH TUỔI CẢI TIẾN - XỬ LÝ CHUỖI NGÀY AN TOÀN
+  const calculateAge = (birthDateString: string) => {
+    if (!birthDateString) {
+      setCalculatedAge(null);
+      return;
     }
-  }, [profile.birthDate]);
-
-  const calculateAge = (birthDate: string) => {
-    const birth = new Date(birthDate);
+    
+    // Tách chuỗi YYYY-MM-DD an toàn
+    const [bYear, bMonth, bDay] = birthDateString.split('-').map(Number);
     const today = new Date();
-    
-    let years = today.getFullYear() - birth.getFullYear();
-    let months = today.getMonth() - birth.getMonth();
-    
+    const tYear = today.getFullYear();
+    const tMonth = today.getMonth() + 1; // getMonth() trả về 0-11
+    const tDay = today.getDate();
+
+    let years = tYear - bYear;
+    let months = tMonth - bMonth;
+
     if (months < 0) {
       years--;
       months += 12;
     }
-    
-    if (today.getDate() < birth.getDate()) {
+
+    // Xử lý lệch ngày
+    if (tDay < bDay) {
       months--;
       if (months < 0) {
         years--;
@@ -80,8 +125,22 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete, isNewUser = fal
       }
     }
     
-    setCalculatedAge({ years, months });
+    // Đảm bảo tuổi không âm
+    if (years < 0 || (years === 0 && months < 0)) {
+      setCalculatedAge(null);
+    } else {
+      setCalculatedAge({ years, months });
+    }
   };
+
+  // Tính tuổi tự động khi ngày sinh thay đổi
+  useEffect(() => {
+    if (profile.birthDate) {
+      calculateAge(profile.birthDate);
+    } else {
+      setCalculatedAge(null);
+    }
+  }, [profile.birthDate]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -99,16 +158,32 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete, isNewUser = fal
       return false;
     }
     
+    // Kiểm tra định dạng ngày hợp lệ
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    if (!datePattern.test(profile.birthDate)) {
+      setError('Ngày sinh không đúng định dạng!');
+      return false;
+    }
+    
     const birthDate = new Date(profile.birthDate);
     const today = new Date();
+    
+    // Kiểm tra ngày sinh không được lớn hơn ngày hiện tại
     if (birthDate > today) {
       setError('Ngày sinh không được lớn hơn ngày hiện tại!');
+      return false;
+    }
+    
+    // Kiểm tra tuổi âm (edge case hiếm gặp)
+    if (calculatedAge && calculatedAge.years < 0) {
+      setError('Ngày sinh không hợp lệ!');
       return false;
     }
     
     return true;
   };
 
+  // ĐÃ SỬA LẠI LOGIC LƯU HỒ SƠ DÙNG CONTEXT THAY VÌ LOCALSTORAGE
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -118,132 +193,117 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete, isNewUser = fal
     setError('');
     
     try {
-      // Lấy user ID từ localStorage
-      let userId = localStorage.getItem('neuropath_user_id');
-      
-      if (!userId) {
-        const userStr = localStorage.getItem('user');
-        if (userStr) {
-          try {
-            const userData = JSON.parse(userStr);
-            userId = userData.id;
-          } catch (e) {
-            console.error('Error parsing user data:', e);
-          }
-        }
-      }
-
-      console.log('🔍 User ID from localStorage:', userId);
-      
-      if (!userId) {
-        setError('Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
+      // 1. Kiểm tra User từ Context thay vì localStorage
+      if (!currentUser || !currentUser.id) {
+        setError('Phiên đăng nhập đã hết hạn. Vui lòng tải lại trang.');
         setTimeout(() => navigate('/login'), 2000);
         return;
       }
 
-      // Tìm user trong DB
-      let dbUser = db.getUserById(userId);
-      
-      // Nếu không tìm thấy, tạo lại user
-      if (!dbUser) {
-        console.log('⚠️ User not found in DB, recreating...');
-        
-        const userStr = localStorage.getItem('user');
-        if (userStr) {
-          try {
-            const userData = JSON.parse(userStr);
-            dbUser = db.createUser({
-              username: userData.email?.split('@')[0] || `user_${Date.now()}`,
-              password_hash: 'hashed_password_demo',
-              email: userData.email,
-              phone: null,
-              full_name: userData.full_name || userData.name || 'User',
-              role: 'parent',
-            });
-            console.log('✅ User recreated in DB:', dbUser);
-          } catch (e) {
-            console.error('Error recreating user:', e);
-          }
-        }
-      }
-      
-      console.log('👤 DB User found:', dbUser);
-      
-      if (!dbUser) {
-        setError('Không thể xác thực người dùng. Vui lòng đăng nhập lại.');
-        setTimeout(() => navigate('/login'), 2000);
-        return;
-      }
+      const userId = currentUser.id;
 
-      // Kiểm tra role của user
-      if (dbUser.role !== 'parent') {
+      // 2. Không cần tìm lại dbUser vì nếu currentUser tồn tại thì tức là hợp lệ rồi
+      if (currentUser.role !== 'parent') {
         setError('Chỉ phụ huynh mới có thể tạo hồ sơ trẻ.');
         return;
       }
 
-      // Tạo child trong DB
-      console.log('📝 Creating child with data:', {
-        full_name: profile.name,
-        birth_date: profile.birthDate,
-        gender: profile.gender,
-        region: profile.region || null,
-        primary_language: profile.primaryLanguage,
-        parent_id: dbUser.id,
-        created_by: dbUser.id,
-      });
+      let savedDbChild;
+      
+      // Phân nhánh: UPDATE hoặc CREATE
+      if (editingData && editingData.id) {
+        // TRƯỜNG HỢP UPDATE (SỬA HỒ SƠ)
+        console.log('📝 Updating child with ID:', editingData.id);
+        
+        savedDbChild = db.updateChild(editingData.id, {
+          full_name: profile.name,
+          birth_date: profile.birthDate,
+          gender: profile.gender,
+          region: profile.region || null,
+          primary_language: profile.primaryLanguage,
+        });
+        
+        console.log('✅ Child updated in DB:', savedDbChild);
+      } else {
+        // TRƯỜNG HỢP TẠO MỚI
+        console.log('📝 Creating new child with data:', {
+          full_name: profile.name,
+          birth_date: profile.birthDate,
+          gender: profile.gender,
+          region: profile.region || null,
+          primary_language: profile.primaryLanguage,
+          parent_id: userId,
+          created_by: userId,
+        });
 
-      const newDbChild = db.createChild({
-        full_name: profile.name,
-        birth_date: profile.birthDate,
-        gender: profile.gender,
-        region: profile.region || null,
-        primary_language: profile.primaryLanguage,
-        notes: null,
-        parent_id: dbUser.id,
-        created_by: dbUser.id,
-      });
+        savedDbChild = db.createChild({
+          full_name: profile.name,
+          birth_date: profile.birthDate,
+          gender: profile.gender,
+          region: profile.region || null,
+          primary_language: profile.primaryLanguage,
+          notes: null,
+          parent_id: userId,
+          created_by: userId,
+        });
 
-      console.log('✅ Child created in DB:', newDbChild);
+        console.log('✅ Child created in DB:', savedDbChild);
+      }
 
       // Chuẩn bị dữ liệu trẻ cho UI
       const childData: ChildProfileData = {
-        id: newDbChild.id,
-        name: newDbChild.full_name,
-        gender: newDbChild.gender || 'other',
-        birthDate: newDbChild.birth_date,
-        region: newDbChild.region || '',
-        primaryLanguage: newDbChild.primary_language || 'vi',
+        id: savedDbChild.id,
+        name: savedDbChild.full_name,
+        gender: savedDbChild.gender || 'other',
+        birthDate: savedDbChild.birth_date,
+        region: savedDbChild.region || '',
+        primaryLanguage: savedDbChild.primary_language || 'vi',
         age: calculatedAge || undefined,
       };
 
-      // Lưu child ID vào localStorage
-      localStorage.setItem('neuropath_child_id', newDbChild.id);
-      localStorage.setItem('current_child', JSON.stringify(childData));
-
-      // Gọi callback onComplete để App biết đã tạo child xong
+      // Chỉ lưu ID, không lưu full object
+      localStorage.setItem('neuropath_child_id', savedDbChild.id);
+      
+      // Gọi callback onComplete để component cha biết đã lưu xong
       if (onComplete) {
         onComplete(childData);
       }
 
     } catch (error) {
       console.error('❌ Error saving child profile:', error);
-      setError('Có lỗi xảy ra khi lưu hồ sơ: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      setError('Có lỗi xảy ra khi lưu hồ sơ. Vui lòng thử lại.');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Xác định tiêu đề dựa vào mode (thêm mới hay chỉnh sửa)
+  const getTitle = () => {
+    if (editingData) return '✏️ Chỉnh sửa hồ sơ trẻ';
+    if (isNewUser) return '🎉 Chào mừng bạn đến với NeuroPath!';
+    return 'Thêm hồ sơ trẻ';
+  };
+
+  const getSubtitle = () => {
+    if (editingData) return 'Cập nhật thông tin chi tiết về trẻ';
+    if (isNewUser) return 'Để bắt đầu, vui lòng tạo hồ sơ cho bé yêu của bạn';
+    return 'Vui lòng cung cấp thông tin chi tiết về trẻ';
+  };
+
+  const getButtonText = () => {
+    if (loading) return 'Đang lưu...';
+    if (editingData) return '💾 Cập nhật hồ sơ';
+    return '✅ Lưu hồ sơ và tiếp tục';
   };
 
   return (
     <div className="child-profile-container">
       <div className="profile-card">
         <h2 className="profile-title">
-          {isNewUser ? '🎉 Chào mừng bạn đến với NeuroPath!' : 'Thêm hồ sơ trẻ'}
+          {getTitle()}
         </h2>
         <p className="profile-subtitle">
-          {isNewUser 
-            ? 'Để bắt đầu, vui lòng tạo hồ sơ cho bé yêu của bạn' 
-            : 'Vui lòng cung cấp thông tin chi tiết về trẻ'
-          }
+          {getSubtitle()}
         </p>
         
         {error && (
@@ -272,7 +332,7 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete, isNewUser = fal
               value={profile.name}
               onChange={handleChange}
               required
-              placeholder="Nhập họ tên đầy đủ của trẻ"
+              placeholder="Nhập đầy đủ tên họ của trẻ"
               className="form-input"
               disabled={loading}
             />
@@ -400,32 +460,61 @@ const ChildProfile: React.FC<ChildProfileProps> = ({ onComplete, isNewUser = fal
           </div>
           
           <div className="form-actions">
-            <button 
-              type="submit" 
-              className="submit-button"
-              disabled={loading}
-              style={{
-                backgroundColor: loading ? '#9ca3af' : '#6366f1',
-                cursor: loading ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {loading ? (
-                <>
-                  <span className="spinner"></span>
-                  Đang lưu...
-                </>
-              ) : (
-                '✅ Lưu hồ sơ và tiếp tục'
+            <div style={{ display: 'flex', gap: '1rem', width: '100%' }}>
+              <button 
+                type="submit" 
+                className="submit-button"
+                disabled={loading}
+                style={{
+                  flex: onCancel ? '1' : 'none',
+                  backgroundColor: loading ? '#9ca3af' : '#6366f1',
+                  cursor: loading ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {loading ? (
+                  <>
+                    <span className="spinner"></span>
+                    {getButtonText()}
+                  </>
+                ) : (
+                  getButtonText()
+                )}
+              </button>
+              
+              {/* Nút Hủy (chỉ hiển thị khi có onCancel) */}
+              {onCancel && (
+                <button 
+                  type="button"
+                  onClick={onCancel}
+                  className="cancel-button"
+                  disabled={loading}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    backgroundColor: '#6b7280',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: '500',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    opacity: loading ? 0.6 : 1
+                  }}
+                >
+                  ❌ Hủy
+                </button>
               )}
-            </button>
-            
-            <div className="process-steps">
-              <div className="step active">1. Thêm hồ sơ trẻ</div>
-              <div className="step-arrow">→</div>
-              <div className="step">2. Sàng lọc sơ bộ</div>
-              <div className="step-arrow">→</div>
-              <div className="step">3. Game đánh giá</div>
             </div>
+            
+            {/* Chỉ hiển thị process steps khi không ở chế độ edit */}
+            {!editingData && (
+              <div className="process-steps">
+                <div className="step active">1. Thêm hồ sơ trẻ</div>
+                <div className="step-arrow">→</div>
+                <div className="step">2. Sàng lọc sơ bộ</div>
+                <div className="step-arrow">→</div>
+                <div className="step">3. Game đánh giá</div>
+              </div>
+            )}
           </div>
         </form>
       </div>

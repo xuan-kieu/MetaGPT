@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 // Components
@@ -18,37 +18,71 @@ import ChildManagement from '../components/Admin/ChildManagement';
 import NormManagement from '../components/Admin/NormManagement';
 import GameManagement from '../components/Admin/GameManagement';
 import SystemStats from '../components/Admin/SystemStats';
+import AdminDashboard from '../components/Admin/AdminDashboard';
 import NotFoundPage from '../components/NotFoundPage';
 
 // Types
 import { UserRole } from '../types';
 
-// ============================================
-// APP ROUTER
-// ============================================
+/**
+ * Component phụ trợ: Ngăn người dùng đã đăng nhập truy cập vào các trang Public (Login/Register)
+ */
+const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser } = useAuth();
+  
+  if (currentUser) {
+    // Nếu đã đăng nhập, điều hướng về trang chủ tương ứng với vai trò hoặc trang mặc định
+    return <Navigate to="/" replace />;
+  }
+  
+  return <>{children}</>;
+};
+
 export const AppRouter: React.FC = () => {
-  const { currentUser, handleLogin, handleLogout } = useAuth();
+  const { currentUser, handleLogin, handleLogout, isLoading } = useAuth();
+
+  // 1. Chờ xác thực xong để tránh tình trạng "nháy" trang hoặc Navigate sai hướng
+  if (isLoading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        fontSize: '1.2rem' 
+      }}>
+        Đang tải dữ liệu hệ thống...
+      </div>
+    ); 
+  }
 
   return (
     <Routes>
-      {/* Public routes */}
+      {/* --- PUBLIC ROUTES --- */}
+      {/* Sử dụng PublicRoute để bọc Login và Register */}
       <Route path="/login" element={
-        currentUser ? <Navigate to="/" replace /> : <LoginScreen onLogin={handleLogin} />
+        <PublicRoute>
+          <LoginScreen onLogin={handleLogin} />
+        </PublicRoute>
       } />
+      
       <Route path="/register" element={
-        currentUser ? <Navigate to="/" replace /> : <RegisterScreen onLogin={handleLogin} />
+        <PublicRoute>
+          <RegisterScreen onLogin={handleLogin} />
+        </PublicRoute>
       } />
+
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
 
-      {/* Protected routes */}
+      {/* --- PROTECTED ROUTES (PARENT / GENERAL) --- */}
       <Route path="/" element={
         <PrivateRoute>
           <AppContent onLogout={handleLogout} />
         </PrivateRoute>
       } />
 
-      {/* Specialist routes */}
+      {/* --- SPECIALIST ROUTES --- */}
       <Route path="/specialist" element={
         <RoleRoute allowedRoles={[UserRole.CLINICIAN]}>
           <div className="app-container" style={{ padding: '20px' }}>
@@ -56,6 +90,7 @@ export const AppRouter: React.FC = () => {
           </div>
         </RoleRoute>
       } />
+      
       <Route path="/specialist/children/:childId" element={
         <RoleRoute allowedRoles={[UserRole.CLINICIAN]}>
           <div className="app-container" style={{ padding: '20px' }}>
@@ -64,21 +99,22 @@ export const AppRouter: React.FC = () => {
         </RoleRoute>
       } />
 
-      {/* Admin routes */}
+      {/* --- ADMIN ROUTES --- */}
       <Route path="/admin" element={
         <RoleRoute allowedRoles={[UserRole.ADMIN]}>
           <AdminLayout />
         </RoleRoute>
       }>
-        <Route index element={<Navigate to="/admin/stats" replace />} />
+        {/* Route mặc định khi vào /admin */}
+        <Route index element={<AdminDashboard />} />
+        <Route path="stats" element={<SystemStats />} />
         <Route path="users" element={<UserManagement />} />
         <Route path="children" element={<ChildManagement />} />
         <Route path="norms" element={<NormManagement />} />
         <Route path="games" element={<GameManagement />} />
-        <Route path="stats" element={<SystemStats />} />
       </Route>
 
-      {/* 404 page */}
+      {/* --- 404 PAGE --- */}
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );

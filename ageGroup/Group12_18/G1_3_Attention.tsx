@@ -192,7 +192,7 @@ const G1_3_Attention: React.FC<SubGameProps> = ({
         faceConfidence: aiData?.faceDetectionConfidence ?? 0
       };
       onFeatureCapture(feature);
-    }, 100);
+    }, 300);
 
     return () => clearInterval(recordLoop);
   }, [showTrain, soundDir, onFeatureCapture, latestAIResult]);

@@ -149,7 +149,7 @@ const G2_1_ChiTayTinhMat: React.FC<SubGameProps> = ({
         handPositionY: aiData?.handY ?? null,
         interactionType: 'joint_attention' 
       } as any);
-    }, 100);
+    }, 300);
     return () => clearInterval(recordLoop);
   }, [onFeatureCapture, latestAIResult, displayItems, targetIdx, showSuccess]);
 

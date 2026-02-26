@@ -100,7 +100,7 @@ const G1_5_ToyTracking: React.FC<SubGameProps> = ({
         faceConfidence: aiData?.faceDetectionConfidence ?? 0
       };
       onFeatureCapture(feature);
-    }, 100);
+    }, 300);
 
     return () => clearInterval(recordLoop);
   }, [toys, onFeatureCapture]);

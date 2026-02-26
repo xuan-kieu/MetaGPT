@@ -283,7 +283,7 @@ const G1_1_Balloon: React.FC<SubGameProps> = ({
       };
 
       onFeatureCapture(feature);
-    }, 100);
+    }, 300);
 
     return () => clearInterval(recordLoop);
   }, [onFeatureCapture, latestAIResult, showPiP]);

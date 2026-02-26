@@ -38,45 +38,34 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     setError('');
 
     try {
-      console.log(`🔐 Bắt đầu đăng nhập với email:`, email, `role:`, expectedRole);
-      
       const data = await login(email, password);
-      console.log('✅ Đăng nhập thành công:', data);
-
       const { token, user } = data;
 
       if (!token || !user) {
         throw new Error('Dữ liệu trả về không hợp lệ');
       }
 
-      // Kiểm tra role dựa trên expectedRole
-      if (expectedRole === UserRole.PARENT && user.role !== 'parent') {
-        throw new Error('Tài khoản không phải là phụ huynh');
-      }
-      if (expectedRole === UserRole.CLINICIAN && user.role !== 'specialist') {
-        throw new Error('Tài khoản không phải là chuyên gia');
-      }
-      if (expectedRole === UserRole.ADMIN && user.role !== 'admin') {
-        throw new Error('Tài khoản không phải là admin');
-      }
-
-      // Xác định UI role
+      // 1. CHUẨN HÓA ROLE: Chuyển role từ API về định dạng Enum của Frontend
       let uiRole: UserRole;
-      switch (user.role) {
-        case 'parent':
-          uiRole = UserRole.PARENT;
-          break;
-        case 'specialist':
-          uiRole = UserRole.CLINICIAN;
-          break;
-        case 'admin':
-          uiRole = UserRole.ADMIN;
-          break;
-        default:
-          uiRole = UserRole.PARENT;
+      const apiRole = user.role?.toLowerCase();
+
+      if (apiRole === 'admin') uiRole = UserRole.ADMIN;
+      else if (apiRole === 'specialist') uiRole = UserRole.CLINICIAN;
+      else uiRole = UserRole.PARENT;
+
+      // 2. KIỂM TRA ROLE: So khớp với vai trò mà người dùng đã chọn ở màn hình trước
+      if (expectedRole !== uiRole) {
+        const roleNames = {
+          [UserRole.ADMIN]: 'Admin',
+          [UserRole.CLINICIAN]: 'Chuyên gia',
+          [UserRole.PARENT]: 'Phụ huynh'
+        };
+        throw new Error(`Tài khoản này không có quyền truy cập vai trò ${roleNames[expectedRole]}`);
       }
 
-      onLogin(uiRole, user.email, user.full_name, token, user);
+      // 3. GỌI ONLOGIN: Truyền đúng trường dữ liệu từ API (full_name)
+      // Lưu ý: Đảm bảo userData chứa toàn bộ object user để dùng cho Dashboard
+      onLogin(uiRole, user.email, user.full_name || user.username, token, user);
       
     } catch (err: any) {
       console.error('❌ Lỗi đăng nhập:', err);

@@ -1,11 +1,11 @@
-import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserRole } from '../types';
 import { User as DBUser } from '../types';
 import * as db from '../services/dbService';
 
 // ============================================
-// ĐỊNH NGHĪA KIỂU
+// ĐỊNH NGHĪA KIỂU & MAPPER
 // ============================================
 
 export interface UIUser {
@@ -31,54 +31,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
 }
 
-// ============================================
-// TẠO CONTEXT
-// ============================================
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// ============================================
-// HẰNG SỐ
-// ============================================
-
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
-// ============================================
-// MAP DỮ LIỆU
-// ============================================
-
-const mapDBUserToUIUser = (dbUser: DBUser): UIUser => {
-  let uiRole: UserRole;
-  switch (dbUser.role) {
-    case 'parent':
-      uiRole = UserRole.PARENT;
-      break;
-    case 'specialist':
-      uiRole = UserRole.CLINICIAN;
-      break;
-    case 'admin':
-      uiRole = UserRole.ADMIN;
-      break;
-    default:
-      uiRole = UserRole.PARENT;
-  }
-  
-  return {
-    id: dbUser.id,
-    email: dbUser.email || '',
-    name: dbUser.full_name,
-    role: uiRole,
-  };
-};
-
-const mapUIUserToDBUser = (uiUser: UIUser, role: string): Omit<DBUser, 'id' | 'created_at' | 'updated_at'> => ({
-  username: uiUser.email?.split('@')[0] || `user_${Date.now()}`,
-  password_hash: 'hashed_password_demo',
-  email: uiUser.email,
-  phone: null,
-  full_name: uiUser.name,
-  role: role as 'parent' | 'specialist' | 'admin',
-});
 
 // ============================================
 // AUTH PROVIDER COMPONENT
@@ -88,10 +42,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUser, setCurrentUser] = useState<UIUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
+  
+  // Dùng useRef để quản lý trạng thái mounted hiệu quả hơn
+  const isMounted = useRef(true);
 
-  // ============================================
-  // VALIDATE TOKEN VỚI BACKEND
-  // ============================================
   const validateTokenWithBackend = useCallback(async (token: string) => {
     try {
       const response = await fetch(`${API_BASE}/auth/validate`, {
@@ -104,7 +58,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   // ============================================
-  // KIỂM TRA AUTHENTICATION
+  // KIỂM TRA AUTHENTICATION (Đã tối ưu)
   // ============================================
   const checkAuth = useCallback(async () => {
     console.log('🔍 Kiểm tra authentication...');
@@ -113,22 +67,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const userStr = localStorage.getItem('user');
 
     if (!token || !userStr) {
-      console.log('ℹ️ Không tìm thấy token/user');
-      setCurrentUser(null);
-      setIsLoading(false);
+      if (isMounted.current) {
+        setCurrentUser(null);
+        setIsLoading(false);
+      }
       return;
     }
 
     try {
-      // Validate token với backend
       const isValid = await validateTokenWithBackend(token);
       
+      if (!isMounted.current) return;
+
       if (!isValid) {
         console.warn('⚠️ Token invalid, clearing storage');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        localStorage.removeItem('neuropath_user_id');
-        localStorage.removeItem('neuropath_child_id');
         setCurrentUser(null);
         setIsLoading(false);
         return;
@@ -136,15 +90,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const uiUser = JSON.parse(userStr) as UIUser;
       
-      // Validate UIUser has required fields
-      if (!uiUser.id || !uiUser.email || !uiUser.role) {
-        throw new Error('Invalid user data');
-      }
-
-      // Sync to DB if needed - tự động tạo user trong DB nếu chưa có
+      // Sync to DB logic
       const dbUser = db.getUserById(uiUser.id);
       if (!dbUser) {
-        console.log('📝 User not in DB, syncing...');
         const dbRole = uiUser.role === UserRole.PARENT ? 'parent' : 
                        uiUser.role === UserRole.CLINICIAN ? 'specialist' : 'admin';
         db.createUser({
@@ -153,59 +101,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: uiUser.email,
           phone: null,
           full_name: uiUser.name,
-          role: dbRole,
+          role: dbRole as any,
         });
-        console.log('✅ User synced to DB');
       }
 
-      setCurrentUser(uiUser);
-      console.log('✅ Đã khôi phục phiên cho user:', uiUser.name);
+      if (isMounted.current) {
+        setCurrentUser(uiUser);
+        console.log('✅ Đã khôi phục phiên cho user:', uiUser.name);
+      }
       
     } catch (error) {
       console.error('Error parsing user data:', error);
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      localStorage.removeItem('neuropath_user_id');
-      localStorage.removeItem('neuropath_child_id');
-      setCurrentUser(null);
+      if (isMounted.current) {
+        localStorage.clear();
+        setCurrentUser(null);
+      }
     } finally {
-      setIsLoading(false);
+      if (isMounted.current) setIsLoading(false);
     }
-  }, []); // Đã xóa navigate khỏi dependency array
+  }, [validateTokenWithBackend]);
+
+  // Khởi chạy checkAuth khi component mount
+  useEffect(() => {
+    isMounted.current = true;
+    checkAuth();
+
+    return () => {
+      isMounted.current = false;
+    };
+  }, [checkAuth]);
 
   // ============================================
-  // ĐĂNG NHẬP
+  // ĐĂNG NHẬP / ĐĂNG XUẤT
   // ============================================
   const handleLogin = useCallback((role: UserRole, email?: string, name?: string, token?: string, userData?: LoginApiUser) => {
-    console.log('🔐 handleLogin nhận được:', { role, email, name, token: !!token, userData });
-
-    if (token) {
-      localStorage.setItem('token', token);
-    }
+    if (token) localStorage.setItem('token', token);
 
     if (userData) {
-      console.log('📦 User data from login:', userData);
-      console.log('📦 User role from API:', userData.role);
-
-      // Map API role to UI role
       let uiRole: UserRole;
       switch (userData.role) {
-        case 'parent':
-          uiRole = UserRole.PARENT;
-          break;
-        case 'specialist':
-          uiRole = UserRole.CLINICIAN;
-          break;
-        case 'admin':
-          uiRole = UserRole.ADMIN;
-          break;
-        default:
-          uiRole = UserRole.PARENT;
+        case 'parent': uiRole = UserRole.PARENT; break;
+        case 'specialist': uiRole = UserRole.CLINICIAN; break;
+        case 'admin': uiRole = UserRole.ADMIN; break;
+        default: uiRole = UserRole.PARENT;
       }
 
-      console.log('🔄 Mapping role:', userData.role, '->', uiRole);
-
-      // Tạo UI User object
       const uiUser: UIUser = {
         id: userData.id,
         email: userData.email,
@@ -213,61 +153,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: uiRole,
       };
 
-      console.log('👤 Mapped UI User:', uiUser);
-      
-      // Lưu UI User vào localStorage (thay vì raw API user)
       localStorage.setItem('user', JSON.stringify(uiUser));
       localStorage.setItem('neuropath_user_id', uiUser.id);
 
-      // Sync user to DB if not exists
-      const existingUser = db.getUserById(uiUser.id);
-      if (!existingUser) {
-        console.log('📝 Đồng bộ user vào db_users:', userData);
-        db.createUser({
-          username: userData.email?.split('@')[0] || `user_${Date.now()}`,
-          password_hash: 'hashed_password_demo',
-          email: userData.email,
-          phone: null,
-          full_name: userData.full_name || userData.name || name || 'User',
-          role: userData.role,
-        });
-      }
-
       setCurrentUser(uiUser);
 
-      // Navigate based on role
-      if (uiRole === UserRole.PARENT) {
-        console.log('👪 Điều hướng đến trang chủ cho PARENT');
-        navigate('/');
-      } else if (uiRole === UserRole.CLINICIAN) {
-        console.log('👨‍⚕️ Điều hướng đến trang specialist');
-        navigate('/specialist');
-      } else if (uiRole === UserRole.ADMIN) {
-        console.log('👑 Điều hướng đến trang admin');
-        navigate('/admin');
-      }
+      // Điều hướng sau đăng nhập
+      if (uiRole === UserRole.PARENT) navigate('/');
+      else if (uiRole === UserRole.CLINICIAN) navigate('/specialist');
+      else if (uiRole === UserRole.ADMIN) navigate('/admin');
     }
   }, [navigate]);
 
-  // ============================================
-  // ĐĂNG XUẤT
-  // ============================================
   const handleLogout = useCallback(() => {
-    console.log('🚪 Logging out');
-    localStorage.removeItem('neuropath_user_id');
-    localStorage.removeItem('neuropath_child_id');
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    localStorage.clear();
     setCurrentUser(null);
     navigate('/login');
   }, [navigate]);
-
-  // ============================================
-  // KIỂM TRA AUTH KHI KHỞI ĐỘNG
-  // ============================================
-  useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
 
   const value = {
     currentUser,
@@ -280,13 +182,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// ============================================
-// HOOK SỬ DỤNG AUTH
-// ============================================
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };

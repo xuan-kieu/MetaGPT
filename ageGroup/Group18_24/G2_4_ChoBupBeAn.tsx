@@ -134,7 +134,7 @@ const G2_4_ChoBupBeAn: React.FC<SubGameProps> = ({
         poseConfidence: aiData?.faceDetectionConfidence ?? 0,
         affect: isSuccess ? 'positive' : (isDragging ? 'focused' : 'neutral')
       } as any);
-    }, 100);
+    }, 300);
     return () => clearInterval(recordLoop);
   }, [onFeatureCapture, latestAIResult, isDragging, isSuccess]);
 

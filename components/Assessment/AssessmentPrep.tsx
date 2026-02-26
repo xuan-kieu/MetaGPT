@@ -1,12 +1,9 @@
 // components/Assessment/AssessmentPrep.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Mic, Wifi, Shield, AlertCircle, Play, CheckCircle2, Loader2 } from 'lucide-react';
-import cameraService from '../../services/cameraService';
+import { Camera, Mic, Wifi, Shield, AlertCircle, Play, CheckCircle2, Loader2, User } from 'lucide-react';
 
 interface AssessmentPrepProps {
-  /** Callback được gọi khi người dùng nhấn "BẮT ĐẦU ĐÁNH GIÁ" và camera/mic đã sẵn sàng */
   onStartAssessment: () => void;
-  /** Tên của trẻ (hiển thị để cá nhân hóa) */
   childName?: string;
 }
 
@@ -26,224 +23,581 @@ const AssessmentPrep: React.FC<AssessmentPrepProps> = ({ onStartAssessment, chil
     input: false,
     internet: navigator.onLine,
   });
+  const [isMounted, setIsMounted] = useState(true);
 
-  // Kiểm tra thiết bị
+  // Hàm dọn dẹp an toàn
+  const cleanupMedia = () => {
+    if (videoRef.current) {
+      try {
+        const stream = videoRef.current.srcObject as MediaStream;
+        if (stream) {
+          stream.getTracks().forEach(track => {
+            track.stop();
+            track.enabled = false;
+          });
+        }
+        videoRef.current.srcObject = null;
+        videoRef.current.load(); // Reset video element
+      } catch (err) {
+        console.log("Cleanup error (safe to ignore):", err);
+      }
+    }
+  };
+
+  // Kiểm tra thiết bị với cách tiếp cận đơn giản hơn
   const handleCheckDevices = async () => {
     setIsChecking(true);
     
-    if (videoRef.current) {
-      const cameraActive = await cameraService.startCamera(videoRef.current);
-      let micActive = false;
-      try {
-        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        micActive = true;
-        audioStream.getTracks().forEach(track => track.stop());
-      } catch (err) {
-        console.error("❌ Mic access denied:", err);
-      }
+    // Dọn dẹp trước khi kiểm tra mới
+    cleanupMedia();
 
-      setStatus(prev => ({
-        ...prev,
-        camera: cameraActive,
-        mic: micActive,
-        input: true,
-      }));
+    try {
+      // Thử lấy cả camera và mic
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: true, 
+        audio: true 
+      });
+      
+      if (videoRef.current && isMounted) {
+        videoRef.current.srcObject = stream;
+        
+        // Đợi video sẵn sàng
+        await new Promise((resolve) => {
+          if (videoRef.current) {
+            videoRef.current.onloadeddata = () => {
+              videoRef.current?.play()
+                .then(resolve)
+                .catch(console.warn);
+            };
+          }
+        });
+
+        setStatus({
+          camera: true,
+          mic: true,
+          input: true,
+          internet: navigator.onLine,
+        });
+      }
+    } catch (err) {
+      console.log("Không thể lấy cả camera và mic:", err);
+      
+      // Thử chỉ lấy camera
+      try {
+        const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        
+        if (videoRef.current && isMounted) {
+          videoRef.current.srcObject = videoStream;
+          
+          await new Promise((resolve) => {
+            if (videoRef.current) {
+              videoRef.current.onloadeddata = () => {
+                videoRef.current?.play()
+                  .then(resolve)
+                  .catch(console.warn);
+              };
+            }
+          });
+
+          setStatus({
+            camera: true,
+            mic: false,
+            input: true,
+            internet: navigator.onLine,
+          });
+        }
+      } catch (videoErr) {
+        console.error("Không thể lấy camera:", videoErr);
+        if (isMounted) {
+          setStatus({
+            camera: false,
+            mic: false,
+            input: false,
+            internet: navigator.onLine,
+          });
+        }
+      }
+    } finally {
+      if (isMounted) {
+        setIsChecking(false);
+      }
     }
-    
-    setIsChecking(false);
   };
 
-  // Bắt đầu đánh giá thật sự
+  // Bắt đầu đánh giá
   const handleStartAssessment = () => {
     if (status.camera && status.mic) {
-      onStartAssessment(); // 👈 gọi callback, không điều hướng trực tiếp
+      onStartAssessment();
     }
   };
 
-  // Dọn dẹp camera khi component unmount
+  // Xử lý unmount an toàn
   useEffect(() => {
+    setIsMounted(true);
+    
     return () => {
-      cameraService.stopCamera();
+      setIsMounted(false);
+      // Dùng setTimeout để tránh xung đột với React cleanup
+      setTimeout(cleanupMedia, 0);
     };
   }, []);
 
   const canStart = status.camera && status.mic;
 
   return (
-    <div className="max-w-5xl mx-auto p-6 bg-white shadow-2xl rounded-3xl my-8 border border-gray-100">
-      {/* HEADER */}
-      <div className="text-center mb-10">
-        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight uppercase">
-          Bước 2: Chuẩn bị đánh giá
-        </h2>
-        <p className="text-slate-500 mt-2 font-medium">
-          {childName ? `Xin chào ${childName}! ` : ''}
-          Đảm bảo mọi thứ sẵn sàng để thu thập dữ liệu chính xác
-        </p>
-      </div>
+    <div className="assessment-container">
+      <style>{`
+        /* CSS giữ nguyên như cũ */
+        .assessment-container {
+          --primary: #4f46e5;
+          --primary-dark: #1e1b4b;
+          --success: #22c55e;
+          --warning: #f59e0b;
+          --danger: #ef4444;
+          max-width: 1200px;
+          margin: 2rem auto;
+          padding: 2rem;
+          background: #fff;
+          border-radius: 2rem;
+          box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+          font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        }
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        .header-banner {
+          background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+          margin: -2rem -2rem 2rem -2rem;
+          padding: 2rem 2rem;
+          border-radius: 2rem 2rem 0 0;
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 1.5rem;
+        }
+
+        .user-badge-card {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          background: rgba(255, 255, 255, 0.15);
+          backdrop-filter: blur(10px);
+          padding: 0.75rem 1.5rem 0.75rem 1.5rem;
+          border-radius: 60px;
+          border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .role-tag {
+          font-size: 10px;
+          background: var(--warning);
+          color: var(--primary-dark);
+          padding: 2px 8px;
+          border-radius: 20px;
+          font-weight: 800;
+          letter-spacing: 0.5px;
+        }
+
+        .prep-grid {
+          display: grid;
+          grid-template-columns: 1.2fr 0.9fr 1fr;
+          gap: 1.5rem;
+          margin-bottom: 2rem;
+        }
+
+        .prep-card {
+          background: white;
+          border-radius: 1.5rem;
+          padding: 1.5rem;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+          border: 1px solid #eef2f6;
+          transition: all 0.2s ease;
+        }
+
+        .status-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+
+        .status-item-box {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0.75rem 1rem;
+          background: #f8fafc;
+          border-radius: 1rem;
+          border: 1px solid #e2e8f0;
+          transition: all 0.2s;
+          font-size: 0.875rem;
+          font-weight: 600;
+        }
+
+        .status-item-box.active {
+          background: #f0fdf4;
+          border-color: var(--success);
+          color: #166534;
+        }
+
+        .video-preview-container {
+          position: relative;
+          aspect-ratio: 16/9;
+          background: var(--primary-dark);
+          border-radius: 1rem;
+          overflow: hidden;
+          margin: 1.5rem 0;
+          border: 3px solid #e2e8f0;
+        }
+
+        .video-element {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .btn-check {
+          width: 100%;
+          padding: 1rem;
+          background: white;
+          border: 2px solid var(--primary);
+          color: var(--primary);
+          border-radius: 0.75rem;
+          font-weight: 700;
+          font-size: 0.875rem;
+          cursor: pointer;
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+        }
+
+        .btn-check:hover:not(:disabled) {
+          background: #eef2ff;
+        }
+
+        .btn-check:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .btn-start {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.75rem;
+          padding: 1.5rem 4rem;
+          border-radius: 60px;
+          font-weight: 800;
+          font-size: 1.5rem;
+          border: none;
+          cursor: pointer;
+          transition: all 0.3s;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+          position: relative;
+          overflow: hidden;
+        }
+
+        .btn-start.enabled {
+          background: var(--primary);
+          color: white;
+        }
+
+        .btn-start.enabled:hover {
+          background: var(--primary-dark);
+          transform: scale(1.05);
+        }
+
+        .btn-start.disabled {
+          background: #e2e8f0;
+          color: #94a3b8;
+          cursor: not-allowed;
+        }
+
+        .matrix-wrapper {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        .matrix-table {
+          width: 100%;
+          border-collapse: separate;
+          border-spacing: 0 8px;
+          font-size: 0.75rem;
+          min-width: 280px;
+        }
+
+        .matrix-table th {
+          text-align: left;
+          color: #1e293b;
+          font-weight: 600;
+          padding: 0.25rem 0.5rem;
+        }
+
+        .matrix-table td {
+          padding: 0.5rem;
+          border-bottom: 1px dashed #e2e8f0;
+        }
+
+        .freq-tag {
+          background: var(--primary-dark);
+          color: #e0e7ff;
+          padding: 0.25rem 0.5rem;
+          border-radius: 20px;
+          font-family: monospace;
+          font-size: 0.7rem;
+          white-space: nowrap;
+        }
+
+        .freq-tag.green {
+          background: #059669;
+          color: #d1fae5;
+        }
+
+        @media (max-width: 1024px) {
+          .prep-grid {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+          }
+          
+          .header-banner {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+          
+          .btn-start {
+            width: 100%;
+            padding: 1rem;
+            font-size: 1.25rem;
+          }
+        }
+
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
         
-        {/* CỘT 1: CAMERA PREVIEW & CHECKLIST */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="relative aspect-video bg-slate-900 rounded-2xl overflow-hidden border-4 border-slate-100 shadow-inner group">
+        .animate-spin {
+          animation: spin 1s linear infinite;
+        }
+
+        .pulse-dot {
+          position: absolute;
+          top: -5px;
+          right: -5px;
+          width: 12px;
+          height: 12px;
+          background: var(--primary);
+          border-radius: 50%;
+          animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(1.2); }
+        }
+      `}</style>
+
+      {/* HEADER BANNER */}
+      <header className="header-banner">
+        <div>
+          <h1 style={{ margin: 0, fontSize: '2.2rem', fontWeight: 800 }}>Bệnh lý thần kinh</h1>
+          <p style={{ opacity: 0.8, margin: '5px 0 0 0', fontSize: '1rem' }}>Hệ thống phân tích đa phương thức AI</p>
+        </div>
+        <div className="user-badge-card">
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ margin: 0, fontSize: '12px', opacity: 0.9 }}>Xin chào,</p>
+            <p style={{ margin: 0, fontWeight: 'bold', fontSize: '1rem' }}>{childName || "Trần Ngọc 5001"}</p>
+            <span className="role-tag">Phụ huynh</span>
+          </div>
+          <div style={{ width: 45, height: 45, background: 'rgba(255,255,255,0.2)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <User size={24} />
+          </div>
+        </div>
+      </header>
+
+      <div className="prep-grid">
+        {/* CỘT 1: THIẾT BỊ */}
+        <div className="prep-card">
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1rem', color: '#1e293b', margin: '0 0 1rem 0' }}>
+            <Camera size={18} color="#4f46e5" /> Trạng thái thiết bị
+          </h3>
+          
+          <div className="status-list">
+            <StatusItem 
+              icon={<Camera size={16} />} 
+              label="Máy ảnh" 
+              active={status.camera} 
+            />
+            <StatusItem 
+              icon={<Mic size={16} />} 
+              label="Micro" 
+              active={status.mic} 
+            />
+            <StatusItem 
+              icon={<Wifi size={16} />} 
+              label="Internet" 
+              active={status.internet} 
+            />
+          </div>
+
+          <div className="video-preview-container">
             <video 
               ref={videoRef} 
               autoPlay 
               muted 
               playsInline 
-              className={`w-full h-full object-cover ${status.camera ? 'opacity-100' : 'opacity-0'}`}
+              className="video-element"
             />
             {!status.camera && !isChecking && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 p-4 text-center">
-                <Camera size={48} className="mb-2 opacity-20" />
-                <p className="text-xs italic">Nhấn nút bên dưới để bật camera kiểm tra</p>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+                <Camera size={40} style={{ opacity: 0.3, marginBottom: '0.5rem' }} />
+                <p style={{ fontSize: '0.75rem', fontStyle: 'italic' }}>Nhấn nút bên dưới để bật camera</p>
               </div>
             )}
             {isChecking && (
-              <div className="absolute inset-0 flex items-center justify-center bg-slate-900/50">
-                <Loader2 className="animate-spin text-white" size={32} />
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.7)' }}>
+                <Loader2 className="animate-spin" color="#4f46e5" size={32} />
               </div>
             )}
-            <div className="absolute top-3 left-3">
-               <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase ${status.camera ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
-                  {status.camera ? 'Live' : 'Offline'}
-               </span>
-            </div>
           </div>
 
-          <section className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-            <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <CheckCircle2 size={18} className="text-blue-600" /> Trạng thái thiết bị
-            </h3>
-            <div className="space-y-2">
-              <StatusItem icon={<Camera size={16}/>} label="Camera" active={status.camera} />
-              <StatusItem icon={<Mic size={16}/>} label="Micro" active={status.mic} />
-              <StatusItem icon={<Wifi size={16}/>} label="Internet" active={status.internet} />
-            </div>
-            
-            <button 
-              onClick={handleCheckDevices}
-              disabled={isChecking}
-              className="w-full mt-4 py-3 bg-white border-2 border-blue-600 text-blue-600 rounded-xl text-sm font-bold hover:bg-blue-50 transition-all flex items-center justify-center gap-2"
-            >
-              {isChecking ? <Loader2 className="animate-spin" size={16} /> : "KIỂM TRA THIẾT BỊ"}
-            </button>
-          </section>
+          <button 
+            onClick={handleCheckDevices} 
+            disabled={isChecking} 
+            className="btn-check"
+          >
+            {isChecking ? (
+              <>
+                <Loader2 className="animate-spin" size={16} />
+                ĐANG KIỂM TRA...
+              </>
+            ) : "KIỂM TRA THIẾT BỊ"}
+          </button>
         </div>
 
         {/* CỘT 2: HƯỚNG DẪN & CAM KẾT */}
-        <div className="lg:col-span-1 space-y-6">
-          <section className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100">
-            <h3 className="text-lg font-bold text-emerald-900 mb-4 flex items-center gap-2">
-               Môi trường
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <section className="prep-card" style={{ background: '#f0fdf4', borderColor: '#dcfce7' }}>
+            <h3 style={{ color: '#166534', margin: '0 0 1rem 0', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Shield size={18} /> Môi trường
             </h3>
-            <ul className="space-y-4">
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
               <EnvStep text="Phòng yên tĩnh, đủ ánh sáng" />
               <EnvStep text="Trẻ ngồi cách màn hình 40-60cm" />
-              <EnvStep text="Camera ở ngang tầm mắt trẻ" />
+              <EnvStep text="Camera ngang tầm mắt trẻ" />
               <EnvStep text="Phụ huynh ngồi phía sau, không can thiệp" />
             </ul>
           </section>
 
-          <section className="bg-amber-50/50 p-6 rounded-2xl border border-amber-100">
-            <h3 className="text-lg font-bold text-amber-900 mb-3 flex items-center gap-2">
-              <Shield size={20} /> Cam kết
+          <section className="prep-card" style={{ background: '#eff6ff', borderColor: '#dbeafe' }}>
+            <h3 style={{ color: '#1e40af', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
+              <Shield size={18} /> Cam kết
             </h3>
-            <div className="text-sm text-amber-800/80 leading-relaxed space-y-2">
-              <p>• Công cụ sàng lọc, không thay thế chẩn đoán.</p>
-              <p>• Dữ liệu được mã hóa và bảo mật tuyệt đối.</p>
-              <p>• Có thể dừng bất cứ lúc nào.</p>
+            <div style={{ fontSize: '0.875rem', color: '#1e3a8a', lineHeight: '1.6' }}>
+              <p style={{ margin: '0.3rem 0' }}>• Công cụ sàng lọc, không thay thế chẩn đoán.</p>
+              <p style={{ margin: '0.3rem 0' }}>• Dữ liệu được mã hóa và bảo mật tuyệt đối.</p>
+              <p style={{ margin: '0.3rem 0' }}>• Có thể dừng bất cứ lúc nào.</p>
             </div>
           </section>
         </div>
 
-        {/* CỘT 3: MA TRẬN DỮ LIỆU */}
-        <div className="lg:col-span-1">
-          <div className="bg-slate-900 rounded-2xl overflow-hidden shadow-lg h-full border border-slate-800">
-            <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-4 py-4 border-b border-slate-700">
-              <h3 className="text-white text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                <AlertCircle size={14} className="text-blue-400" /> Ma trận đa phương thức
-              </h3>
-            </div>
-            <div className="p-2 overflow-y-auto">
-              <table className="w-full text-[10px] text-slate-400">
+        {/* CỘT 3: MA TRẬN */}
+        <div className="prep-card" style={{ padding: '0', overflow: 'hidden' }}>
+          <div style={{ padding: '1.2rem', background: '#1e1b4b', color: 'white' }}>
+            <h3 style={{ margin: 0, fontSize: '0.875rem', letterSpacing: '1px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <AlertCircle size={14} color="#818cf8" /> Ma trận đa phương thức
+            </h3>
+          </div>
+          <div style={{ padding: '1.5rem' }}>
+            <div className="matrix-wrapper">
+              <table className="matrix-table">
                 <thead>
-                  <tr className="text-slate-500 border-b border-slate-800">
-                    <th className="p-2 text-left">Nguồn</th>
-                    <th className="p-2 text-left">Dữ liệu</th>
-                    <th className="p-2 text-right">Freq</th>
+                  <tr>
+                    <th>Nguồn</th>
+                    <th>Dữ liệu</th>
+                    <th style={{ textAlign: 'right' }}>Freq</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800">
-                  <MatrixRow label="Webcam" desc="468 mặt, 21 tay, tư thế, ánh mắt" freq="30fps" />
-                  <MatrixRow label="Micro" desc="MFCCs, Pitch, VAD, Emotion" freq="16kHz" />
-                  <MatrixRow label="Tương tác" desc="Phản ứng, click, đường chuột" freq="Event" />
-                  <MatrixRow label="Metadata" desc="Thời gian, session info" freq="Session" />
+                <tbody>
+                  <MatrixRow label="Thị giác" desc="468 mặt, 21 tay, tư thế" freq="30fps" />
+                  <MatrixRow label="Micro" desc="MFCCs, Pitch, VAD" freq="16kHz" isGreen />
+                  <MatrixRow label="Tương tác" desc="Click & chuột, phản ứng" freq="Event" />
+                  <MatrixRow label="Metadata" desc="Thời gian, session" freq="Session" isGreen />
                 </tbody>
               </table>
-              <div className="mt-4 p-3 bg-slate-800/50 rounded-lg">
-                 <p className="text-[9px] text-slate-500 italic">
-                   Công nghệ: MediaPipe, OpenCV, PyTorch, Librosa
-                 </p>
-              </div>
+            </div>
+            <div style={{ marginTop: '1.5rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '0.75rem' }}>
+              <p style={{ fontSize: '0.7rem', color: '#64748b', margin: 0, fontStyle: 'italic' }}>
+                Công nghệ: MediaPipe, PyTorch, OpenCV, Librosa
+              </p>
             </div>
           </div>
         </div>
       </div>
 
       {/* FOOTER ACTION */}
-      <div className="mt-12 flex flex-col items-center border-t border-gray-100 pt-8">
+      <div style={{ marginTop: '2.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', borderTop: '1px solid #e2e8f0', paddingTop: '2rem' }}>
         {!canStart && (
-          <p className="text-red-500 text-sm mb-4 font-medium flex items-center gap-2">
-            <AlertCircle size={16} /> Vui lòng kiểm tra và cấp quyền Camera/Micro để tiếp tục
+          <p style={{ color: '#ef4444', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <AlertCircle size={16} /> Vui lòng cấp quyền Camera/Micro để tiếp tục
           </p>
         )}
         <button 
-          onClick={handleStartAssessment}
-          className={`group relative flex items-center gap-3 px-16 py-5 rounded-full font-black text-xl shadow-2xl transition-all transform hover:scale-105 ${
-            canStart 
-            ? 'bg-blue-600 text-white hover:bg-blue-700' 
-            : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-          }`}
-          disabled={!canStart}
+          onClick={handleStartAssessment} 
+          disabled={!canStart} 
+          className={`btn-start ${canStart ? 'enabled' : 'disabled'}`}
         >
-          <Play size={24} fill={canStart ? "white" : "none"} /> BẮT ĐẦU ĐÁNH GIÁ
-          {canStart && (
-            <span className="absolute -top-1 -right-1 flex h-4 w-4">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-4 w-4 bg-blue-500"></span>
-            </span>
-          )}
+          <Play size={24} fill={canStart ? "white" : "none"} /> 
+          BẮT ĐẦU ĐÁNH GIÁ
+          {canStart && <span className="pulse-dot" />}
         </button>
       </div>
     </div>
   );
 };
 
-// ==================== SUB-COMPONENTS ====================
+// Sub-components
 const StatusItem = ({ icon, label, active }: { icon: React.ReactNode; label: string; active: boolean }) => (
-  <div className={`flex items-center justify-between p-2.5 rounded-xl border transition-all ${active ? 'bg-green-50 border-green-100' : 'bg-white border-slate-100'}`}>
-    <div className="flex items-center gap-2">
-      <div className={`${active ? 'text-green-600' : 'text-slate-400'}`}>{icon}</div>
-      <span className={`text-xs font-bold ${active ? 'text-green-700' : 'text-slate-500'}`}>{label}</span>
+  <div className={`status-item-box ${active ? 'active' : ''}`}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      {icon} 
+      <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{label}</span>
     </div>
-    {active ? <CheckCircle2 size={16} className="text-green-500" /> : <div className="w-4 h-4 rounded-full border-2 border-slate-200"></div>}
+    {active ? 
+      <CheckCircle2 size={16} color="#22c55e" /> : 
+      <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #cbd5e1' }} />
+    }
   </div>
 );
 
 const EnvStep = ({ text }: { text: string }) => (
-  <li className="flex items-center gap-3 text-sm text-slate-700 font-medium">
-    <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+  <li style={{ 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: '0.75rem', 
+    fontSize: '0.875rem', 
+    marginBottom: '0.75rem', 
+    fontWeight: 500,
+    color: '#334155'
+  }}>
+    <div style={{ 
+      width: '0.5rem', 
+      height: '0.5rem', 
+      borderRadius: '50%', 
+      background: '#10b981',
+      boxShadow: '0 0 0 2px rgba(16,185,129,0.2)'
+    }} /> 
     {text}
   </li>
 );
 
-const MatrixRow = ({ label, desc, freq }: { label: string; desc: string; freq: string }) => (
+const MatrixRow = ({ label, desc, freq, isGreen }: { label: string; desc: string; freq: string; isGreen?: boolean }) => (
   <tr>
-    <td className="p-2 font-bold text-slate-300">{label}</td>
-    <td className="p-2 text-slate-500">{desc}</td>
-    <td className="p-2 text-right font-mono text-blue-400">{freq}</td>
+    <td style={{ fontWeight: 600, color: '#1e293b' }}>{label}</td>
+    <td style={{ color: '#64748b' }}>{desc}</td>
+    <td style={{ textAlign: 'right' }}>
+      <span className={`freq-tag ${isGreen ? 'green' : ''}`}>{freq}</span>
+    </td>
   </tr>
 );
 

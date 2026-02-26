@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const authMiddleware = require('../middleware/authMiddleware');
+const { authenticateToken } = require('../middleware/authMiddleware');
 const { requireRole } = require('../middleware/roleMiddleware');
 const adminController = require('../controllers/adminController');
 
 // Tất cả routes đều yêu cầu xác thực và role admin
-router.use(authMiddleware);
+router.use(authenticateToken);
 router.use(requireRole(['admin']));
 
 // ===== User management =====

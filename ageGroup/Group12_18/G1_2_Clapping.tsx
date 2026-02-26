@@ -184,7 +184,7 @@ const G1_2_Clapping: React.FC<SubGameProps> = ({ latestAIResult, onFeatureCaptur
       };
       
       onFeatureCapture(feature);
-    }, 100);
+    }, 300);
 
     return () => clearInterval(recordLoop);
   }, [isClapping, isAiSpeaking, onFeatureCapture, latestAIResult]);

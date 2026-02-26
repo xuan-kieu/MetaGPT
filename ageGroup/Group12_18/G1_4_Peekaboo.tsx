@@ -7,6 +7,18 @@ interface PeekabooFeature extends BehavioralFeature {
   isObjectVisible?: boolean;
 }
 
+// Define the AI features interface
+interface AIFeatures {
+  gazeX?: number;
+  gazeY?: number;
+  avgAttention?: number;
+  avgSmile?: number;
+  avgFrown?: number;
+  micVolume?: number;
+  faceDetectionConfidence?: number;
+  faceConfidence?: number;
+}
+
 const G1_4_Peekaboo: React.FC<SubGameProps> = ({ 
   latestAIResult, 
   onFeatureCapture, 
@@ -157,27 +169,30 @@ const G1_4_Peekaboo: React.FC<SubGameProps> = ({
 
   useEffect(() => {
     const record = setInterval(() => {
-      const ai = latestAIResult.current?.features || {};
+      // Properly type and access AI data with optional chaining and fallbacks
+      const aiData = latestAIResult.current?.features as AIFeatures | undefined;
+      
       const target = bushes.find(b => b.id === targetBushId);
       const feature: PeekabooFeature = {
         timestamp: Date.now(),
-        gazeX: ai.gazeX || 0.5, gazeY: ai.gazeY || 0.5,
-        targetX: target?.x || 50,
-        targetY: bearVisible ? (target?.y || 50) - 15 : (target?.y || 50),
+        gazeX: aiData?.gazeX ?? 0.5, 
+        gazeY: aiData?.gazeY ?? 0.5,
+        targetX: target?.x ?? 50,
+        targetY: bearVisible ? (target?.y ?? 50) - 15 : (target?.y ?? 50),
         targetSize: bearVisible ? 140 : 110,
-        attentionLevel: ai.avgAttention || 0,
-        smileIntensity: ai.avgSmile || 0,
-        frownIntensity: ai.avgFrown || 0,
+        attentionLevel: aiData?.avgAttention ?? 0,
+        smileIntensity: aiData?.avgSmile ?? 0,
+        frownIntensity: aiData?.avgFrown ?? 0,
         isObjectVisible: bearVisible,
         anticipationScore: 0, 
-        childVocalization: ai.micVolume || 0,
+        childVocalization: aiData?.micVolume ?? 0,
         audioStimulus: bearVisible ? 'pop' : null,
-        affect: 'neutral',
-        poseConfidence: ai.faceDetectionConfidence || 0,
-        faceConfidence: ai.faceConfidence || 0
+        affect: 'neutral' as const, // Use 'as const' to ensure it's treated as a literal type
+        poseConfidence: aiData?.faceDetectionConfidence ?? 0,
+        faceConfidence: aiData?.faceConfidence ?? 0
       };
       onFeatureCapture(feature);
-    }, 100);
+    }, 300);
     return () => clearInterval(record);
   }, [bearVisible, targetBushId, latestAIResult, onFeatureCapture]);
 

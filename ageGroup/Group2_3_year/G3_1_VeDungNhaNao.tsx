@@ -87,7 +87,7 @@ const G3_SortingGame: React.FC<SubGameProps> = ({
         dragActive: isDragging,
         totalCorrect: score
       } as any);
-    }, 100);
+    }, 300);
     return () => clearInterval(recordLoop);
   }, [onFeatureCapture, latestAIResult, currentItem, isDragging, feedback, score]);
 

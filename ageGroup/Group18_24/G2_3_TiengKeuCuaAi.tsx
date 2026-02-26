@@ -152,7 +152,7 @@ const G2_3_TiengKeuCuaAi: React.FC<SubGameProps> = ({
         attentionLevel: aiData?.avgAttention ?? 0.5,
         affect: isAnswering ? 'positive' : 'neutral'
       } as any);
-    }, 100);
+    }, 300);
     return () => clearInterval(recordLoop);
   }, [onFeatureCapture, latestAIResult, displayItems, targetIdx, isAnswering, reactionStartTime]);
 

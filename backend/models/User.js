@@ -1,11 +1,6 @@
 const { getConnection, sql } = require('../config/database');
 
 class User {
-    /**
-     * Tìm user theo email
-     * @param {string} email
-     * @returns {Promise<object|null>}
-     */
     static async findByEmail(email) {
         const pool = await getConnection();
         const result = await pool.request()
@@ -17,11 +12,6 @@ class User {
         return result.recordset[0] || null;
     }
 
-    /**
-     * Tìm user theo id
-     * @param {string} id (UUID)
-     * @returns {Promise<object|null>}
-     */
     static async findById(id) {
         const pool = await getConnection();
         const result = await pool.request()
@@ -33,10 +23,6 @@ class User {
         return result.recordset[0] || null;
     }
 
-    /**
-     * Lấy tất cả users (cho admin)
-     * @returns {Promise<Array>}
-     */
     static async findAll() {
         const pool = await getConnection();
         const result = await pool.request()
@@ -47,11 +33,6 @@ class User {
         return result.recordset;
     }
 
-    /**
-     * Tạo user mới
-     * @param {Object} userData - { username, password_hash, email, phone, full_name, role }
-     * @returns {Promise<string>} id của user mới
-     */
     static async create(userData) {
         const { username, password_hash, email, phone, full_name, role } = userData;
         const pool = await getConnection();
@@ -70,12 +51,6 @@ class User {
         return result.recordset[0].id;
     }
 
-    /**
-     * Cập nhật thông tin user
-     * @param {string} id
-     * @param {Object} userData - các trường cần cập nhật
-     * @returns {Promise<boolean>}
-     */
     static async update(id, userData) {
         const { username, email, phone, full_name, role } = userData;
         const pool = await getConnection();
@@ -95,30 +70,6 @@ class User {
         return result.rowsAffected[0] > 0;
     }
 
-    /**
-     * Cập nhật mật khẩu
-     * @param {string} id
-     * @param {string} hashedPassword
-     * @returns {Promise<boolean>}
-     */
-    static async updatePassword(id, hashedPassword) {
-        const pool = await getConnection();
-        const result = await pool.request()
-            .input('id', sql.UniqueIdentifier, id)
-            .input('password_hash', sql.NVarChar, hashedPassword)
-            .query(`
-                UPDATE users
-                SET password_hash = @password_hash, updated_at = SYSDATETIMEOFFSET()
-                WHERE id = @id
-            `);
-        return result.rowsAffected[0] > 0;
-    }
-
-    /**
-     * Xóa user (chỉ admin)
-     * @param {string} id
-     * @returns {Promise<boolean>}
-     */
     static async delete(id) {
         const pool = await getConnection();
         const result = await pool.request()
@@ -126,11 +77,7 @@ class User {
             .query('DELETE FROM users WHERE id = @id');
         return result.rowsAffected[0] > 0;
     }
-    /**
-     * Tìm user theo username
-     * @param {string} username
-     * @returns {Promise<object|null>}
-     */
+
     static async findByUsername(username) {
         const pool = await getConnection();
         const result = await pool.request()
@@ -142,11 +89,6 @@ class User {
         return result.recordset[0] || null;
     }
 
-    /**
-     * Tìm user theo id kèm password hash
-     * @param {string} id
-     * @returns {Promise<object|null>}
-     */
     static async findByIdWithPassword(id) {
         const pool = await getConnection();
         const result = await pool.request()
@@ -157,7 +99,13 @@ class User {
             `);
         return result.recordset[0] || null;
     }
+
+    // Hàm phục vụ adminController.getSystemStats
+    static async count() {
+        const pool = await getConnection();
+        const result = await pool.request().query('SELECT COUNT(*) as total FROM users');
+        return result.recordset[0].total;
+    }
 }
 
 module.exports = User;
-

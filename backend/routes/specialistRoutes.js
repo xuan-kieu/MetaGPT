@@ -1,26 +1,24 @@
+// routes/specialistRoutes.js
 const express = require('express');
 const router = express.Router();
-const authMiddleware = require('../middleware/authMiddleware');
-const { requireRole } = require('../middleware/roleMiddleware');
 const specialistController = require('../controllers/specialistController');
+const { authenticateToken, authorizeSpecialist } = require('../middleware/authMiddleware');
 
-// Tất cả routes đều yêu cầu xác thực và role specialist
-router.use(authMiddleware);
-router.use(requireRole(['specialist']));
+// Tất cả routes đều yêu cầu xác thực và role specialist hoặc admin
+router.use(authenticateToken);
+router.use(authorizeSpecialist);
 
-// Danh sách trẻ của chuyên gia
+// Dashboard stats
+router.get('/dashboard/stats', specialistController.getDashboardStats);
+
+// Children management
 router.get('/children', specialistController.getChildren);
-
-// Chi tiết một trẻ
 router.get('/children/:childId', specialistController.getChildDetail);
-
-// Lịch sử đánh giá của trẻ
-router.get('/children/:childId/assessments', specialistController.getChildAssessments);
-
-// Xem báo cáo chi tiết của một đánh giá
-router.get('/assessments/:assessmentId', specialistController.getAssessmentDetail);
-
-// Ghi chú nhanh về trẻ
+router.get('/children/:childId/notes', specialistController.getChildNotes);
 router.post('/children/:childId/notes', specialistController.createQuickNote);
+
+// Assessments management
+router.get('/assessments', specialistController.getAllAssessments);
+router.get('/assessments/:assessmentId', specialistController.getAssessmentDetail);
 
 module.exports = router;

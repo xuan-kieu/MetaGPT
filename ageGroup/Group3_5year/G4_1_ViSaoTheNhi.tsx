@@ -415,7 +415,7 @@ const G4_1_WhySoSocial: React.FC<SubGameProps> = ({
         thinkingTime: (Date.now() - startTime) / 1000,
         attentionLevel: aiData?.avgAttention ?? 0.5
       } as any);
-    }, 100);
+    },300);
     return () => clearInterval(recordLoop);
   }, [onFeatureCapture, latestAIResult, startTime]);
 

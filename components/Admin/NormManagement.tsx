@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getNorms, createNorm, updateNorm, deleteNorm, Norm } from '../../services/adminService';
+import api from '@/services/api';
 
 // Giả sử có các interface này (có thể import từ service hoặc định nghĩa riêng)
 interface Skill {
@@ -33,12 +34,10 @@ const NormManagement: React.FC = () => {
     try {
       setLoading(true);
       // Gọi đồng thời các API cần thiết
-      const [normsData, skillsData, ageGroupsData] = await Promise.all([
-        getNorms(),
-        // Giả sử có các hàm này trong adminService
-        fetch('/api/admin/skills').then(res => res.json()),
-        fetch('/api/admin/age-groups').then(res => res.json())
-      ]);
+const [normsData, skillsData, ageGroupsData] = await Promise.all([getNorms(),
+      api.get('/admin/skills').then(res => res.data), // Dùng api thay vì fetch
+      api.get('/admin/age-groups').then(res => res.data)
+    ]);
       setNorms(normsData);
       setSkills(skillsData);
       setAgeGroups(ageGroupsData);

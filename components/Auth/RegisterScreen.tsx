@@ -365,7 +365,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin }) => {
               value={formData.password}
               onChange={handleChange}
               onBlur={handleBlur}
-              placeholder="•••••• (ít nhất 6 ký tự)"
+              placeholder="•••••• (ít nhất 6 ký tự gồm chữ và số)"
               disabled={loading}
               className={getInputClassName('password')}
               style={touched.password && errors.password ? { borderColor: '#dc2626' } : {}}

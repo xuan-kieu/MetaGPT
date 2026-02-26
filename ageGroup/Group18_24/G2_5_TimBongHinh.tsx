@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { SubGameProps, BehavioralFeature } from '../../types';
+import { SubGameProps, BehavioralFeature, Emotion } from '../../types';
 
 const G2_5_TimBongHinh: React.FC<SubGameProps> = ({ 
   latestAIResult, 
@@ -108,6 +108,13 @@ const G2_5_TimBongHinh: React.FC<SubGameProps> = ({
   useEffect(() => {
     const recordLoop = setInterval(() => {
       const aiData = latestAIResult.current?.features;
+      
+      // Determine emotion based on game state
+      let emotion: Emotion = 'neutral';
+      if (isSuccess) {
+        emotion = 'happy'; // Using 'happy' instead of 'positive'
+      }
+      
       onFeatureCapture({
         timestamp: Date.now(),
         gazeX: aiData?.gazeX ?? 0.5,
@@ -120,11 +127,11 @@ const G2_5_TimBongHinh: React.FC<SubGameProps> = ({
         attentionLevel: aiData?.avgAttention ?? 0.5,
         smileIntensity: aiData?.avgSmile ?? 0,
         frownIntensity: 0,
-        affect: isSuccess ? 'positive' : 'neutral',
+        affect: emotion, // Now using proper Emotion type
         poseConfidence: aiData?.faceDetectionConfidence ?? 0,
         faceConfidence: aiData?.faceDetectionConfidence ?? 0
       });
-    }, 100);
+    }, 300);
     return () => clearInterval(recordLoop);
   }, [onFeatureCapture, latestAIResult, target, isSuccess]);
 

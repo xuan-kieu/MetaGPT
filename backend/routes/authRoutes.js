@@ -7,7 +7,7 @@ const {
     registerValidation 
 } = require('../utils/validation');
 const authController = require('../controllers/authController');
-const authMiddleware = require('../middleware/authMiddleware');
+const { authenticateToken } = require('../middleware/authMiddleware');
 
 // Public routes
 router.post('/register', registerValidation, authController.register);
@@ -16,8 +16,8 @@ router.post('/forgot-password', forgotPasswordValidation, authController.forgotP
 router.post('/reset-password', resetPasswordValidation, authController.resetPassword);
 
 // Protected routes
-router.get('/me', authMiddleware, authController.getProfile);
-router.post('/logout', authMiddleware, authController.logout);
-router.post('/change-password', authMiddleware, authController.changePassword);
+router.get('/me', authenticateToken, authController.getProfile);
+router.post('/logout', authenticateToken, authController.logout);
+router.post('/change-password', authenticateToken, authController.changePassword);
 
 module.exports = router;    
